@@ -4,8 +4,7 @@
 # The crawl archive (data/, SQLite) persists between runs in the Actions
 # cache under a rolling key. If the cache is gone, the run re-seeds the
 # archive from the published snapshot (snapshot/seed.mjs) and then crawls
-# incrementally; only when there is no snapshot either does it crawl full
-# history from relays.
+# incrementally. With neither, it stops unless run with full=true.
 #
 # Setup (see README "Static snapshot"):
 #   secret  CLOUDFLARE_API_TOKEN  token with "Workers Scripts: Edit" on the personal account
@@ -16,8 +15,8 @@ name: Snapshot
 on:
   schedule:
     # Hourly, off the top of the hour when GitHub's scheduler is busiest.
-    # On a private repo each run bills ~2-3 minutes against 2,000 free
-    # minutes a month; switch to '17 */2 * * *' there, or make the repo public.
+    # A run takes about a minute. On a private repo (2,000 free minutes a
+    # month) keep it hourly or slower; public repos have unlimited minutes.
     - cron: '17 * * * *'
   workflow_dispatch:
     inputs:
@@ -57,11 +56,20 @@ jobs:
           key: archive-${{ github.run_id }}
           restore-keys: archive-
 
+      # A relay crawl alone cannot rebuild everything (worker-verified purchases
+      # and events relays no longer serve came from the legacy feed), so never
+      # start from scratch unless asked to with the `full` input.
       - name: Seed archive from the published snapshot
-        if: steps.archive.outputs.cache-matched-key == '' && env.SNAPSHOT_URL != ''
+        if: steps.archive.outputs.cache-matched-key == ''
+        env:
+          FULL: ${{ inputs.full && '1' || '' }}
         run: |
-          node --no-warnings snapshot/seed.mjs "$SNAPSHOT_URL" || code=$?
-          if [ "${code:-0}" = 2 ]; then echo "No snapshot to seed from; this run crawls full history."; exit 0; fi
+          if [ -n "$SNAPSHOT_URL" ]; then node --no-warnings snapshot/seed.mjs "$SNAPSHOT_URL" || code=$?; else code=2; fi
+          if [ "${code:-0}" = 2 ]; then
+            if [ -n "$FULL" ]; then echo "No snapshot to seed from; crawling full history as requested."; exit 0; fi
+            echo "::error::No cached archive and no snapshot at SNAPSHOT_URL to seed from. Publish a snapshot first (README), or run with full=true to start from relays only."
+            exit 1
+          fi
           exit "${code:-0}"
 
       - name: Crawl relays

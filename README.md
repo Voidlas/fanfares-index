@@ -69,8 +69,10 @@ How a run works (`.github/workflows/snapshot.yml`, hourly at :17 and on demand):
 1. Restore `data/` (the SQLite crawl archive) from the Actions cache, under a rolling key.
 2. If there is no cache, `snapshot/seed.mjs` rebuilds the archive from the published
    site's raw-event files (`SNAPSHOT_URL`), so relays are never re-crawled from scratch.
-   If there is no published site yet either, the crawl reads full history once.
-3. `node sync.js` crawls incrementally (about 45 s), and the archive is saved back to the cache.
+   With neither, the run stops: a relay crawl alone misses the worker-verified purchases
+   and legacy-feed events in the original archive. Run it with `full=true` to start from
+   relays anyway.
+3. `node sync.js` crawls incrementally (well under a minute), and the archive is saved back to the cache.
 4. `snapshot/build.mjs` computes every response with the same model and query code as
    the Worker API (`worker/src/model.js`, `worker/src/queries.js`) and writes `dist/`.
 5. `wrangler deploy --config snapshot/wrangler.jsonc` publishes `dist/` to the
@@ -106,8 +108,15 @@ Setup on GitHub (repository settings → Secrets and variables → Actions):
 - variable `SNAPSHOT_URL`: the deployed site's URL (for example
   `https://fanfares-index-static.<subdomain>.workers.dev`), used to re-seed a lost cache.
 
-Actions minutes: a run bills 2–3 minutes. Hourly runs come to roughly 1,500–2,200 minutes a
-month, so on a private repository (2,000 free minutes) use `17 */2 * * *`. Public
-repositories have unlimited minutes.
+First publish (bootstrap): build from the full local archive and deploy once by hand, then
+set `SNAPSHOT_URL`; the next run seeds its archive from that site.
+
+```bash
+npm run snapshot -- --db /path/to/fanfares.sqlite
+npx wrangler deploy --config snapshot/wrangler.jsonc
+```
+
+Actions minutes: a run takes about a minute, so hourly runs fit even a private
+repository's 2,000 free minutes. Public repositories have unlimited minutes.
 
 API reference: open `/#/api` in the running app.
