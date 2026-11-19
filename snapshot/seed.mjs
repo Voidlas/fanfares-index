@@ -12,7 +12,7 @@
  * Exit codes: 0 seeded, 2 no snapshot at that URL (caller should run a full
  * crawl instead), 1 anything else.
  */
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
@@ -50,6 +50,7 @@ for (let i = 0; i < shards.length; i += 8) {
 }
 const verified = await get('archive/verified.json');
 
+mkdirSync(path.dirname(path.resolve(args.db)), { recursive: true });
 const db = openDb(args.db);
 const added = ingest(db, events);
 const insert = db.prepare('INSERT OR IGNORE INTO verified_purchases(address, buyer, amount_msats, purchased_at) VALUES(?, ?, ?, ?)');

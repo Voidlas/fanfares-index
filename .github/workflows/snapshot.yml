@@ -67,7 +67,9 @@ jobs:
       - name: Crawl relays
         id: sync
         timeout-minutes: 15
-        run: node --no-warnings sync.js ${{ inputs.full && '--full' || '' }}
+        run: |
+          mkdir -p data # gitignored, so absent on a fresh runner without a cached archive
+          node --no-warnings sync.js ${{ inputs.full && '--full' || '' }}
 
       - name: Save archive
         if: always() && steps.sync.outcome == 'success'
