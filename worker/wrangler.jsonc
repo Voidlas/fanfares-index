@@ -1,0 +1,19 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "fanfares-network",
+  // Personal Cloudflare account, pinned so deploys never land elsewhere.
+  "account_id": "b7465cf893d9e5b0ca472f9620f87483",
+  "main": "src/index.js",
+  "compatibility_date": "2026-05-28",
+  "observability": { "enabled": true },
+  "assets": {
+    "directory": "../public",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"],
+    "not_found_handling": "single-page-application"
+  },
+  "durable_objects": { "bindings": [{ "name": "ARCHIVE", "class_name": "Archive" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Archive"] }],
+  // Safety net only: the Archive's own alarm drives the sync every minute.
+  "triggers": { "crons": ["*/15 * * * *"] }
+}

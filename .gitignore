@@ -1,0 +1,6 @@
+node_modules/
+data/
+backup/
+.DS_Store
+dist/
+.wrangler/

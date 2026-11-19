@@ -1,0 +1,15 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  // Static Fanfares Index: the explorer plus the prebuilt /api/v1/ JSON from
+  // snapshot/build.mjs. Assets only (no `main`), so no Worker code runs and
+  // requests are not metered. Separate from the fanfares-network Worker.
+  "name": "fanfares-index-static",
+  // Personal Cloudflare account, pinned so deploys never land elsewhere.
+  "account_id": "b7465cf893d9e5b0ca472f9620f87483",
+  "compatibility_date": "2026-05-22",
+  "assets": {
+    "directory": "../dist",
+    // Missing files are real 404s so the client can tell "no such person" apart.
+    "not_found_handling": "none"
+  }
+}

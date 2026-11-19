@@ -1,0 +1,95 @@
+# Crawls Fanfares activity from Nostr relays and publishes the static
+# Fanfares Index (explorer + prebuilt /api/v1/ JSON) to Cloudflare.
+#
+# The crawl archive (data/, SQLite) persists between runs in the Actions
+# cache under a rolling key. If the cache is gone, the run re-seeds the
+# archive from the published snapshot (snapshot/seed.mjs) and then crawls
+# incrementally; only when there is no snapshot either does it crawl full
+# history from relays.
+#
+# Setup (see README "Static snapshot"):
+#   secret  CLOUDFLARE_API_TOKEN  token with "Workers Scripts: Edit" on the personal account
+#   var     SNAPSHOT_URL          public URL of the deployed site, e.g. https://fanfares-index-static.<sub>.workers.dev
+# Without the token the run still crawls and builds, and skips the deploy.
+name: Snapshot
+
+on:
+  schedule:
+    # Hourly, off the top of the hour when GitHub's scheduler is busiest.
+    # On a private repo each run bills ~2-3 minutes against 2,000 free
+    # minutes a month; switch to '17 */2 * * *' there, or make the repo public.
+    - cron: '17 * * * *'
+  workflow_dispatch:
+    inputs:
+      full:
+        description: Re-read full history from relays (slow, heavy on relays)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: write # prune old archive caches
+
+concurrency:
+  group: snapshot
+  cancel-in-progress: false
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      SNAPSHOT_URL: ${{ vars.SNAPSHOT_URL }}
+      INTERVAL_MIN: '60'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Restore archive
+        id: archive
+        uses: actions/cache/restore@v4
+        with:
+          path: data
+          key: archive-${{ github.run_id }}
+          restore-keys: archive-
+
+      - name: Seed archive from the published snapshot
+        if: steps.archive.outputs.cache-matched-key == '' && env.SNAPSHOT_URL != ''
+        run: |
+          node --no-warnings snapshot/seed.mjs "$SNAPSHOT_URL" || code=$?
+          if [ "${code:-0}" = 2 ]; then echo "No snapshot to seed from; this run crawls full history."; exit 0; fi
+          exit "${code:-0}"
+
+      - name: Crawl relays
+        id: sync
+        timeout-minutes: 15
+        run: node --no-warnings sync.js ${{ inputs.full && '--full' || '' }}
+
+      - name: Save archive
+        if: always() && steps.sync.outcome == 'success'
+        uses: actions/cache/save@v4
+        with:
+          path: data
+          key: archive-${{ github.run_id }}
+
+      - name: Build static site
+        run: node --no-warnings snapshot/build.mjs --interval-min "$INTERVAL_MIN"
+
+      - name: Check static API against the dynamic one
+        run: node --no-warnings snapshot/parity.mjs
+
+      - name: Deploy to Cloudflare
+        if: env.CLOUDFLARE_API_TOKEN != ''
+        run: npx --yes wrangler@4.92.0 deploy --config snapshot/wrangler.jsonc
+
+      - name: Prune old archive caches
+        if: always() && steps.sync.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh cache list --repo "$GITHUB_REPOSITORY" --key archive- --sort created_at --order desc --limit 100 --json id --jq '.[3:][].id' \
+            | xargs -r -n1 gh cache delete --repo "$GITHUB_REPOSITORY"
