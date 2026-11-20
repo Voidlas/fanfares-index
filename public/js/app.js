@@ -62,3 +62,15 @@ window.addEventListener('hashchange', route);
 initPlayer();
 initSyncStatus();
 route();
+
+// Installable app and offline support (sw.js). Skipped where unsupported or on plain http dev hosts.
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+}
+
+// "Install app" appears only when the browser offers installation.
+let installPrompt;
+const installBtn = document.getElementById('install');
+window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installPrompt = e; installBtn.hidden = false; });
+installBtn.addEventListener('click', async () => { installBtn.hidden = true; await installPrompt?.prompt(); installPrompt = null; });
+window.addEventListener('appinstalled', () => { installBtn.hidden = true; });

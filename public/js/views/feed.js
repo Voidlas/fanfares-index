@@ -5,16 +5,17 @@
  */
 import { get } from '../api.js';
 import { fanfaresUrl } from '../nostr.js';
-import { subscribeLive, liveItems } from '../live-relays.js';
-import { agoShort, cover, displayName, esc, kindName, personHref, releaseHref, satsShort } from '../ui.js';
+import { subscribeLive, liveItems, liveStatus } from '../live-relays.js';
+import { ago, agoShort, avatar, cover, displayName, esc, kindName, num, personHref, releaseHref, satsShort } from '../ui.js';
 
-const VERB = { sale: 'bought', zap: 'zapped', release: 'published', comment: 'commented on', reaction: 'reacted to' };
+const VERB = { sale: 'bought', zap: 'zapped', release: 'published', comment: 'commented on', reaction: 'reacted to', repost: 'reposted' };
 const ICON = {
   sale: '<path d="M11.5 2.5 4.5 11h5l-1 6.5 7-8.5h-5z"/>',
   zap: '<path d="M11.5 2.5 4.5 11h5l-1 6.5 7-8.5h-5z"/>',
   release: '<path d="M10 4v12M4 10h12"/>',
   comment: '<path d="M4 5h12v8H9l-4 3v-3H4z"/>',
-  reaction: '<path d="M10 16s-6-3.6-6-8a3.2 3.2 0 0 1 6-1.6A3.2 3.2 0 0 1 16 8c0 4.4-6 8-6 8z"/>'
+  reaction: '<path d="M10 16s-6-3.6-6-8a3.2 3.2 0 0 1 6-1.6A3.2 3.2 0 0 1 16 8c0 4.4-6 8-6 8z"/>',
+  repost: '<path d="M5 8h9l-3-3M15 12H6l3 3"/>'
 };
 
 /** Link to an event: its page here, or Fanfares for one newer than the snapshot. */
@@ -39,36 +40,62 @@ export function feedItem(e) {
   </div>`;
 }
 
+/** The newest published event, pinned above a feed. */
+function latestCard(e) {
+  const r = e.release || {};
+  const ext = r.fresh ? ' target="_blank" rel="noopener"' : '';
+  return `<a class="latest" href="${eventHref(r)}"${ext}>
+    <span class="latest-cover">${cover({ ...r, kindLabel: kindName(r.kind, r.kindLabel) }, {})}</span>
+    <span class="latest-body"><span class="eyebrow">Latest published · ${esc(kindName(r.kind, r.kindLabel))} · ${ago(e.at)}</span>
+      <b>${esc(r.title || 'Untitled')}</b><span class="latest-by">${avatar(e.actor, 18)}${esc(displayName(e.actor))}</span></span>
+    <span class="latest-go" aria-hidden="true">→</span></a>`;
+}
+
+/** One-line connection status for a feed header. */
+export function liveStatusText() {
+  const s = liveStatus();
+  if (!s.since) return 'Connecting to relays…';
+  const relays = s.connected ? `${s.connected} of ${s.relays.length} relays connected` : 'Relays unreachable, showing the archive';
+  const fresh = s.live ? `${num(s.live)} new since the snapshot` : 'listening for new activity';
+  return `${relays} · ${fresh}${s.lastLiveAt ? ` · last ${agoShort(s.lastLiveAt)} ago` : ''}`;
+}
+
 /**
  * Renders a self-updating feed into `host`: the snapshot's latest activity
- * with live relay items merged on top as they arrive.
+ * and the archive's comments, reactions and reposts, with live relay items
+ * merged on top as they arrive.
  * @param {HTMLElement} host
  * @param {object} [opts]
  * @param {number} [opts.limit] Rows shown.
  * @param {(e: object) => boolean} [opts.filter] Which items to show.
- * @param {(n: number) => void} [opts.onLive] Called with the live item count.
+ * @param {HTMLElement} [opts.status] Element that shows the connection status line.
+ * @param {boolean} [opts.pin] Pin the newest published event above the rows.
+ * @param {(rows: object[]) => void} [opts.onPaint] Called with every merged item after each paint.
  * @returns {Promise<{refilter: (f: (e: object) => boolean) => void}>}
  */
-export async function liveFeed(host, { limit = 8, filter = () => true, onLive } = {}) {
+export async function liveFeed(host, { limit = 8, filter = () => true, status, pin = false, onPaint } = {}) {
   const snapshot = await get('/api/activity', { limit: 100 });
   let show = filter;
   const paint = () => {
     if (!host.isConnected) { stop(); return; }
-    const rows = [...liveItems(), ...snapshot].filter(show).sort((a, b) => b.at - a.at).slice(0, limit);
+    const all = [...liveItems(), ...snapshot].sort((a, b) => b.at - a.at);
+    const latest = pin ? all.find((e) => e.type === 'release') : null;
+    const rows = all.filter((e) => e !== latest && show(e)).slice(0, limit);
     const before = new Set([...host.querySelectorAll('[data-id]')].map((x) => x.dataset.id));
-    host.innerHTML = rows.length ? rows.map(feedItem).join('') : '<div class="empty">Nothing here yet.</div>';
+    host.innerHTML = (latest ? latestCard(latest) : '') + (rows.length ? rows.map(feedItem).join('') : '<div class="empty">Nothing here yet.</div>');
     if (before.size) host.querySelectorAll('.fi.is-live').forEach((x) => { if (!before.has(x.dataset.id)) x.classList.add('enter'); });
-    onLive?.(liveItems().length);
+    if (status) status.textContent = liveStatusText();
+    onPaint?.(all);
   };
   let pending;
   const stop = subscribeLive((m) => {
-    if (m.type === 'status') return;
+    if (m.type === 'status') { if (status && host.isConnected) status.textContent = liveStatusText(); return; }
     clearTimeout(pending);
     pending = setTimeout(paint, m.type === 'profile' ? 300 : 60);
   });
   paint();
   // Keep relative times fresh.
-  const tick = setInterval(() => { if (!host.isConnected) { clearInterval(tick); stop(); } else paint(); }, 60000);
+  const tick = setInterval(() => { if (!host.isConnected) { clearInterval(tick); stop(); } else paint(); }, 30000);
   return { refilter: (f) => { show = f; paint(); } };
 }
 

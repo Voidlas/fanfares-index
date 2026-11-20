@@ -9,16 +9,18 @@
  *
  * One shared connection per page load; views subscribe and unsubscribe.
  */
-import { get } from './api.js';
+import { get, isStatic } from './api.js';
 import { kindName } from './ui.js';
 
 const RELAYS = ['wss://fanfares.nostr1.com', 'wss://relay.primal.net', 'wss://nos.lol', 'wss://relay.damus.io'];
 const PROFILE_RELAYS = ['wss://purplepag.es', 'wss://relay.primal.net'];
 const APP_REF = '31990:d7d8109ee43657ce6056ada4653006bbb641f31e50e85243681c2724507811ec:Fanfares';
 const CONTENT_KINDS = [1, 30023, 31337, 31338, 31339, 36787];
-const ACTIVITY_KINDS = [9735, 9321, 1111, 7];
+const ACTIVITY_KINDS = [9735, 9321, 1111, 7, 6, 16];
+/** Archive roles replayed into the feed on load (sales and new events already come from the activity file). */
+const ARCHIVE_ROLES = ['comment', 'reaction', 'repost'];
 const CHUNK = 150;
-const KEEP = 200;
+const KEEP = 400;
 
 const listeners = new Set();
 const items = [];
@@ -28,6 +30,8 @@ const status = new Map(RELAYS.map((r) => [r, 'connecting']));
 let started = false;
 let since = 0;
 let received = 0;
+let lastLiveAt = 0;
+let archiveLoaded = false;
 const known = new Map(); // address or event id -> { address, title, cover, kind, kindLabel }
 
 const emit = (msg) => { for (const fn of listeners) fn(msg); };
@@ -74,6 +78,7 @@ function toItem(ev) {
     return { id: ev.id, type: 'zap', at: ev.created_at, sats, rail: 'cashu', actor: { pubkey: ev.pubkey }, release };
   }
   if (ev.kind === 1111) return { id: ev.id, type: 'comment', at: ev.created_at, text: ev.content.slice(0, 160), actor: { pubkey: ev.pubkey }, release };
+  if (ev.kind === 6 || ev.kind === 16) return { id: ev.id, type: 'repost', at: ev.created_at, actor: { pubkey: ev.pubkey }, release };
   if (ev.kind === 7) return { id: ev.id, type: 'reaction', at: ev.created_at, text: ev.content === '+' || !ev.content ? '♥' : ev.content.slice(0, 4), actor: { pubkey: ev.pubkey }, release };
   return null;
 }
@@ -137,20 +142,37 @@ function setStatus(url, s) {
   emit({ type: 'status' });
 }
 
-/** Handles one event from any relay. */
-function ingest(ev) {
-  if (!ev?.id || seen.has(ev.id) || ev.created_at < since) return;
+/**
+ * Handles one event, from a relay or (with `archived`) from the archive.
+ * @returns {object|null} The feed item it became.
+ */
+function ingest(ev, archived = false) {
+  if (!ev?.id || seen.has(ev.id) || (!archived && ev.created_at < since)) return null;
   seen.add(ev.id);
-  received += 1;
+  if (!archived) received += 1;
   const item = toItem(ev);
-  if (!item) return;
-  item.live = true;
+  if (!item) return null;
+  item.live = !archived;
+  if (!archived) lastLiveAt = Math.max(lastLiveAt, ev.created_at);
   withProfile(item);
   wantProfile(item.actor.pubkey);
   items.push(item);
   items.sort((a, b) => b.at - a.at);
   if (items.length > KEEP) items.length = KEEP;
-  emit({ type: 'item', item });
+  if (!archived) emit({ type: 'item', item });
+  return item;
+}
+
+/** Replays the newest archived comments, reactions and reposts (static snapshot only). */
+async function loadArchive() {
+  if (!(await isStatic())) return;
+  const fetchJson = (rel) => fetch(`api/v1/${rel}`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+  const manifest = await fetchJson('events/manifest.json');
+  const files = ARCHIVE_ROLES.map((role) => manifest?.roles?.[role]?.shards?.[0]?.file).filter(Boolean);
+  const shards = await Promise.all(files.map(fetchJson));
+  for (const evs of shards) for (const ev of evs || []) ingest(ev, true);
+  archiveLoaded = true;
+  emit({ type: 'item' });
 }
 
 /** Loads what the snapshot knows, then subscribes on every relay. */
@@ -181,7 +203,8 @@ async function start() {
   for (let i = 0; i < addrs.length; i += CHUNK) filters.push({ kinds: ACTIVITY_KINDS, '#a': addrs.slice(i, i + CHUNK), since });
   for (let i = 0; i < ids.length; i += CHUNK) filters.push({ kinds: ACTIVITY_KINDS, '#e': ids.slice(i, i + CHUNK), since });
   if (typeof WebSocket === 'undefined') { for (const r of RELAYS) status.set(r, 'failed'); emit({ type: 'status' }); return; }
-  for (const url of RELAYS) open(url, filters, ingest, { track: true });
+  loadArchive().catch(() => {});
+  for (const url of RELAYS) open(url, filters, (ev) => ingest(ev), { track: true });
 }
 
 /**
@@ -198,4 +221,8 @@ export function subscribeLive(fn) {
 export const liveItems = () => items;
 
 /** Connection state per relay, plus counters. */
-export const liveStatus = () => ({ relays: [...status], received, since, connected: [...status.values()].filter((s) => s === 'live').length });
+export const liveStatus = () => ({
+  relays: [...status], received, since, lastLiveAt, archiveLoaded,
+  live: items.filter((i) => i.live).length,
+  connected: [...status.values()].filter((s) => s === 'live').length
+});

@@ -22,8 +22,10 @@ function niceMax(v) {
  * @param {object} opts
  * @param {(n: number) => string} opts.format Tooltip value formatter.
  * @param {string} opts.label Accessible name of the measure.
+ * @param {boolean} [opts.compress] Square-root scale (default): one record month no longer
+ *   flattens every other month, while bigger bars still read as bigger.
  */
-export function monthlyBars(host, rows, { format = num, label = 'Value' } = {}) {
+export function monthlyBars(host, rows, { format = num, label = 'Value', compress = true } = {}) {
   if (!rows.length) { host.innerHTML = '<div class="empty">No dated data yet.</div>'; return; }
   // Draw at the host's real pixel width so axis text stays 11px on phones
   // instead of being scaled down with the viewBox.
@@ -32,8 +34,10 @@ export function monthlyBars(host, rows, { format = num, label = 'Value' } = {}) 
   const max = niceMax(Math.max(...rows.map((r) => r.value)));
   const step = (W - L) / rows.length;
   const bw = Math.max(3, Math.min(28, step - 2));
-  const y = (v) => T + (H - T - B) * (1 - v / max);
-  const ticks = [0, 0.5, 1].map((f) => max * f);
+  const shape = compress ? Math.sqrt : (f) => f;
+  const y = (v) => T + (H - T - B) * (1 - shape(Math.max(0, v) / max));
+  // Ticks at even heights, labelled with the (rounded) value at that height.
+  const ticks = compress ? [0, roundDown(max / 9), roundDown(max * 4 / 9), max] : [0, max / 2, max];
   const labelEvery = Math.ceil(rows.length / (W < 520 ? 4 : 8));
   const bars = rows.map((r, i) => {
     const x = L + i * step + (step - bw) / 2;
@@ -54,7 +58,7 @@ export function monthlyBars(host, rows, { format = num, label = 'Value' } = {}) 
       <g class="axis">${ticks.map((t) => `<text x="${L - 8}" y="${y(t) + 4}" text-anchor="end">${esc(shortNum(t))}</text>`).join('')}${xLabels}</g>
       ${bars}
     </svg>
-    <table class="sr-only"><caption>${esc(label)} per month</caption>${rows.map((r) => `<tr><th>${esc(monthLabel(r.month))}</th><td>${esc(format(r.value))}</td></tr>`).join('')}</table>
+    <div class="sr-only"><table><caption>${esc(label)} per month</caption>${rows.map((r) => `<tr><th>${esc(monthLabel(r.month))}</th><td>${esc(format(r.value))}</td></tr>`).join('')}</table></div>
   </div>`;
   const chart = host.querySelector('.chart');
   const svg = chart.querySelector('svg');
@@ -75,6 +79,14 @@ export function monthlyBars(host, rows, { format = num, label = 'Value' } = {}) 
     svg.querySelectorAll('.bar').forEach((b) => b.classList.remove('dim'));
     tip?.remove(); tip = null;
   });
+}
+
+/** Rounds down to two significant digits so compressed-scale ticks read cleanly: 104321 → 100000. */
+function roundDown(v) {
+  if (v <= 0) return 0;
+  const p = 10 ** (Math.floor(Math.log10(v)) - 1);
+  const n = Math.floor(v / p);
+  return (n >= 50 ? Math.floor(n / 10) * 10 : n >= 20 ? Math.floor(n / 5) * 5 : n) * p;
 }
 
 /** Axis tick labels: 250000 → "250K". */

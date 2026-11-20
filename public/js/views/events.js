@@ -46,11 +46,13 @@ export async function renderReleases(main, query) {
   main.innerHTML = `
     <div class="page-head"><div class="eyebrow">Events</div><h1>Everything published on Fanfares</h1>
       <p>Podcasts, audiobooks, music, articles and notes. Each one is a signed Nostr event, with every sale it made on the record.</p></div>
-    <div class="kind-tiles" id="tiles">${Array.from({ length: 5 }, () => '<div class="kind-tile"><div class="skeleton" style="height:58px"></div></div>').join('')}</div>
-    <div class="toolbar">
-      <label class="search">${searchIcon}<input type="search" id="q" placeholder="Filter by title, topic or creator" value="${esc(state.q)}" aria-label="Filter events"></label>
-      <div id="sort"></div>
-      <div id="period"></div>
+    <div class="ev-controls">
+      <div class="toolbar">
+        <label class="search">${searchIcon}<input type="search" id="q" placeholder="Filter by title, topic or creator" value="${esc(state.q)}" aria-label="Filter events"></label>
+        <div id="sort"></div>
+        <div id="period"></div>
+      </div>
+      <div class="kind-tiles" id="tiles">${Array.from({ length: 5 }, () => '<div class="kind-tile"><div class="skeleton" style="height:52px"></div></div>').join('')}</div>
     </div>
     <div class="result-count" id="count" aria-live="polite"></div>
     <div id="results">${gridSkeleton(12)}</div>

@@ -34,17 +34,17 @@ export function windowName(w) {
 export const monthYear = (ts) => new Date(ts * 1000).toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 
 /**
- * Change against the previous window, in neutral words (growth is context, not a status).
+ * Change against the previous window, short: "↑ 20%", "↓ 8%", "no change".
  * @param {number} now This window's value.
  * @param {number|null|undefined} before The previous window's value; null for all time.
  * @param {object} d The insights answer (for `since` on all time).
  */
 export function change(now, before, d) {
   if (before == null) return `since ${monthYear(d.since)}`;
-  if (!before) return now ? 'none in the period before' : 'none in the period before either';
+  if (!before) return now ? 'new this period' : 'none yet';
   const pct = Math.round(((now - before) / before) * 100);
-  if (pct === 0) return 'same as the period before';
-  return `${pct > 0 ? '↑' : '↓'} ${Math.abs(pct)}% vs the period before`;
+  if (pct === 0) return 'no change';
+  return `${pct > 0 ? '↑' : '↓'} ${Math.abs(pct)}%`;
 }
 
 /**

@@ -9,6 +9,12 @@
   <meta property="og:title" content="Fanfares Index">
   <meta property="og:description" content="Every published event, creator, buyer and zap receipt on Fanfares, in one live, searchable index.">
   <link rel="icon" href="img/logo.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="img/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Fanfares">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -53,6 +59,7 @@
       <div class="footer-links">
         <a href="#/api">API</a>
         <a href="#/live">Sync status</a>
+        <button class="install-btn" id="install" hidden>Install app</button>
         <label class="toggle"><input type="checkbox" id="show-test"> Include test events</label>
       </div>
     </div>

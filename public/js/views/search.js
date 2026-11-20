@@ -1,8 +1,8 @@
 /**
  * Instant Fanfares search: one field over every published event, creator
  * and supporter in the index, matched as you type. Pasting an npub or hex
- * pubkey jumps to that profile. Before a query it suggests what is selling
- * and who is rising.
+ * pubkey jumps to that profile. Before a query it shows what is selling and
+ * who is rising; index totals sit behind a Stats toggle.
  */
 import { get } from '../api.js';
 import { decodeNpub, npub } from '../nostr.js';
@@ -12,12 +12,6 @@ import {
 } from '../ui.js';
 
 const SCOPES = [['all', 'Everything'], ['events', 'Events'], ['creators', 'Creators'], ['supporters', 'Supporters']];
-const RECENT_KEY = 'fanfares.recentSearches';
-
-const recent = () => { try { return JSON.parse(localStorage.getItem(RECENT_KEY) || '[]').slice(0, 6); } catch { return []; } };
-function remember(q) {
-  try { localStorage.setItem(RECENT_KEY, JSON.stringify([q, ...recent().filter((x) => x !== q)].slice(0, 6))); } catch { /* storage blocked */ }
-}
 
 /** Marks the query inside already-escaped text. */
 function mark(text, q) {
@@ -57,13 +51,14 @@ export async function renderSearch(main, query) {
     <section class="search-hero">
       <div class="eyebrow"><span class="spark" aria-hidden="true"></span>Instant Fanfares search</div>
       <h1>Search anything on Fanfares, <span class="accent">instantly.</span></h1>
-      <p id="search-lede">Every event, creator and supporter in the index, matched as you type. Paste an npub to jump straight to a profile.</p>
       <label class="search-big">
         <svg width="20" height="20" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="5.2" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M11 11l3.5 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
         <input type="search" id="search-q" placeholder="Try “bitcoin”, a creator’s name or an npub" value="${esc(state.q)}" aria-label="Search Fanfares" autocomplete="off" spellcheck="false">
         <kbd>/</kbd>
       </label>
-      <div class="search-scope" id="scope"></div>
+      <div class="search-row"><div class="search-scope" id="scope"></div>
+        <button class="btn sm stats-btn" id="stats-btn" aria-expanded="false" aria-controls="stats">Stats</button></div>
+      <div class="search-stats" id="stats" hidden></div>
     </section>
     <div id="search-body"></div>`;
 
@@ -71,8 +66,21 @@ export async function renderSearch(main, query) {
   const body = main.querySelector('#search-body');
   if (!matchMedia('(hover: none)').matches) input.focus();
 
-  const [ov, people] = await Promise.all([get('/api/overview'), get('/api/creators', { limit: 1 })]);
-  main.querySelector('#search-lede').textContent = `${num(ov.releases)} events, ${num(people.total)} creators and ${num(ov.buyers)} supporters, matched as you type. Paste an npub to jump straight to a profile.`;
+  const ov = await get('/api/overview');
+  const statsBtn = main.querySelector('#stats-btn');
+  const statsBox = main.querySelector('#stats');
+  statsBtn.addEventListener('click', async () => {
+    const open = statsBox.hidden;
+    statsBox.hidden = !open;
+    statsBtn.setAttribute('aria-expanded', String(open));
+    if (!open || statsBox.childElementCount) return;
+    const people = await get('/api/creators', { limit: 1 });
+    const cell = (v, l) => `<div><b>${v}</b><span>${esc(l)}</span></div>`;
+    statsBox.innerHTML = `<div class="stats-grid">${[
+      cell(num(ov.releases), 'events'), cell(num(people.total), 'creators'), cell(num(ov.buyers), 'supporters'),
+      cell(num(ov.sales), 'purchases'), cell(satsShort(ov.salesSats), 'sats paid'), cell(num(ov.archive.events), 'signed Nostr events')
+    ].join('')}</div><div class="stats-kinds">${ov.byKind.filter((k) => k.count).map((k) => `<span>${esc(kindName(k.kind))} <b>${num(k.count)}</b></span>`).join('')}</div>`;
+  });
 
   const syncUrl = () => {
     const p = new URLSearchParams();
@@ -81,13 +89,10 @@ export async function renderSearch(main, query) {
     history.replaceState(null, '', `#/search${p.size ? `?${p}` : ''}`);
   };
 
-  /** What to show before a query: recent searches, what is selling, who is rising. */
+  /** What to show before a query: what is selling and who is rising. */
   const idle = async () => {
-    const r = recent();
     body.innerHTML = `
-      ${r.length ? `<div class="s-suggest"><span class="muted">Recent</span>${r.map((x) => `<button class="pill" data-q="${esc(x)}">${esc(x)}</button>`).join('')}</div>` : ''}
-      <div class="s-suggest" id="s-try"><span class="muted">Try</span></div>
-      <section class="section s-section"><div class="section-head"><h2>Selling this week</h2><a class="more" href="#/events?sort=sales&period=week">View all</a></div><div id="s-hot">${gridSkeleton(6)}</div></section>
+      <section class="s-section"><div class="section-head"><h2>Selling this week</h2><a class="more" href="#/events?sort=sales&period=week">View all</a></div><div id="s-hot">${gridSkeleton(6)}</div></section>
       <section class="section s-section"><div class="section-head"><h2>Rising creators</h2><a class="more" href="#/creators?period=month">View all</a></div><div class="s-people" id="s-rising"></div></section>`;
     const [hot, rising] = await Promise.all([
       get('/api/releases', { sort: 'sales', period: 'week', limit: 6 }),
@@ -99,9 +104,6 @@ export async function renderSearch(main, query) {
     body.querySelector('#s-hot').innerHTML = `<div class="shelf">${releaseGrid(hotItems)}</div>`;
     body.querySelector('#s-rising').innerHTML = rising.items.map((c) => personRow(c, '', `${plural(c.sales, 'sale')} · ${plural(c.buyers, 'supporter')}`, satsShort(c.earnedSats))).join('')
       || '<div class="empty">No creator sales this month yet.</div>';
-    // Suggestions: the formats on offer and a few creator names people search for.
-    const tries = [...ov.byKind.filter((k) => k.count).map((k) => kindName(k.kind)), ...rising.items.slice(0, 3).map(displayName)];
-    body.querySelector('#s-try').insertAdjacentHTML('beforeend', [...new Set(tries)].slice(0, 8).map((x) => `<button class="pill" data-q="${esc(x)}">${esc(x)}</button>`).join(''));
   };
 
   let seq = 0;
@@ -141,25 +143,14 @@ export async function renderSearch(main, query) {
 
   const scopeSeg = segmented(main.querySelector('#scope'), SCOPES, state.scope, (v) => { state.scope = v; syncUrl(); run(); window.scrollTo({ top: 0, behavior: 'smooth' }); }, 'Search in');
   let debounce;
-  let saveTimer;
   input.addEventListener('input', () => {
     clearTimeout(debounce);
-    clearTimeout(saveTimer);
     debounce = setTimeout(() => { state.q = input.value.trim(); syncUrl(); run(); }, 120);
-    saveTimer = setTimeout(() => { if (input.value.trim().length > 1) remember(input.value.trim()); }, 1500);
   });
   input.addEventListener('keydown', (e) => {
     if (e.key !== 'Enter') return;
     const hex = decodeNpub(input.value) || (/^[0-9a-f]{64}$/i.test(input.value.trim()) ? input.value.trim().toLowerCase() : '');
     if (hex) location.hash = personHref(hex);
-    else if (input.value.trim()) remember(input.value.trim());
-  });
-  body.addEventListener('click', (e) => {
-    const pill = e.target.closest('[data-q]');
-    if (!pill) return;
-    input.value = pill.dataset.q;
-    state.q = pill.dataset.q;
-    syncUrl(); run();
   });
   await run();
 }

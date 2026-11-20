@@ -6,7 +6,7 @@
 import { get, isStatic } from '../api.js';
 import { hbars } from '../charts.js';
 import { liveStatus, subscribeLive } from '../live-relays.js';
-import { ago, esc, num, segmented, toast } from '../ui.js';
+import { ago, esc, num, satsShort, segmented, toast } from '../ui.js';
 import { onSyncEvent } from '../sync-status.js';
 import { liveFeed } from './feed.js';
 
@@ -20,7 +20,7 @@ const MATCH = {
   all: () => true,
   money: (e) => e.type === 'sale' || e.type === 'zap',
   release: (e) => e.type === 'release',
-  talk: (e) => e.type === 'comment' || e.type === 'reaction'
+  talk: (e) => e.type === 'comment' || e.type === 'reaction' || e.type === 'repost'
 };
 const STATE_LABEL = { live: 'Live', connecting: 'Connecting', reconnecting: 'Reconnecting', failed: 'Unreachable' };
 
@@ -35,7 +35,9 @@ export async function renderLive(main) {
       <p>Purchases, zaps, new events and conversations as they land on Nostr relays, streamed into your browser in real time on top of the hourly snapshot.</p></div>
     <div class="live-layout">
       <div>
-        <div class="live-tools"><div id="filter"></div><span class="muted" id="live-count"></span></div>
+        <div class="tally-head">Last 7 days</div>
+        <div class="tally" id="tally"></div>
+        <div class="live-tools"><div id="filter"></div><span class="muted live-status" id="live-count"></span></div>
         <div class="panel feed-panel" id="feed"><div class="skeleton" style="height:420px;margin:16px 0"></div></div>
       </div>
       <aside class="live-side">
@@ -56,10 +58,19 @@ export async function renderLive(main) {
     </div>`;
   const $ = (sel) => main.querySelector(sel);
 
-  const feed = await liveFeed($('#feed'), {
-    limit: 40,
-    onLive: (n) => { $('#live-count').textContent = n ? `${num(n)} new since the snapshot` : 'Listening for new activity…'; }
-  });
+  const tally = (all) => {
+    const from = Date.now() / 1000 - 7 * 86400;
+    const wk = all.filter((e) => e.at >= from);
+    const count = (f) => wk.filter(f).length;
+    const salesSats = wk.filter((e) => e.type === 'sale').reduce((n, e) => n + (e.sats || 0), 0);
+    $('#tally').innerHTML = [
+      ['Purchases', num(count((e) => e.type === 'sale')), `${satsShort(salesSats)} sats`],
+      ['Zaps & nutzaps', num(count((e) => e.type === 'zap')), 'since the snapshot'],
+      ['Published', num(count((e) => e.type === 'release')), 'new events'],
+      ['Conversation', num(count((e) => ['comment', 'reaction', 'repost'].includes(e.type))), 'comments, reactions, reposts']
+    ].map(([l, v, h]) => `<div><span class="label">${l}</span><b>${v}</b><span class="hint">${h}</span></div>`).join('');
+  };
+  const feed = await liveFeed($('#feed'), { limit: 40, pin: true, status: $('#live-count'), onPaint: tally });
   segmented($('#filter'), FILTERS, 'all', (v) => feed.refilter(MATCH[v]), 'Show');
 
   const paintConn = () => {

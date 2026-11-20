@@ -50,7 +50,9 @@ export async function renderHome(main) {
     </section>
 
     <section class="section pulse" id="pulse">
-      <div class="section-head wrap"><h2>The pulse</h2><div id="pulse-window"></div></div>
+      <div class="section-head wrap"><h2 class="pulse-title">The pulse <button class="play-btn" id="pulse-play" aria-label="Pause the tour" aria-pressed="true">
+        <svg class="i-pause" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><rect x="2" y="1.5" width="2.6" height="9" rx="1" fill="currentColor"/><rect x="7.4" y="1.5" width="2.6" height="9" rx="1" fill="currentColor"/></svg>
+        <svg class="i-play" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 1.6v8.8L10.4 6z" fill="currentColor"/></svg></button></h2><div id="pulse-window"></div></div>
       <div class="panel">
         <div class="pulse-tiles" id="pulse-tiles">${TILES.map(() => `<div class="pulse-tile">${skeleton(64)}</div>`).join('')}</div>
         <div id="pulse-chart">${skeleton(240)}</div>
@@ -80,6 +82,7 @@ export async function renderHome(main) {
     <section class="section grid-2">
       <div>
         <div class="section-head"><h2 class="with-badge">What’s happening on Fanfares ${liveBadge}</h2><a class="more" href="#/live">Open live view</a></div>
+        <div class="live-status" id="feed-status">Connecting to relays…</div>
         <div class="panel feed-panel" id="feed"><div class="skeleton" style="height:360px;margin:16px 0"></div></div>
       </div>
       <div class="panel">
@@ -107,7 +110,7 @@ export async function renderHome(main) {
     renderLeaderboards($('#top'));
   }
 
-  liveFeed($('#feed'), { limit: 8 });
+  liveFeed($('#feed'), { limit: 8, pin: true, status: $('#feed-status') });
   const [ov, best, newest] = await Promise.all([
     get('/api/overview'),
     get('/api/releases', { sort: 'sales', limit: 12 }),
@@ -185,11 +188,37 @@ function renderPulse(main) {
     if ($('#pulse-tiles').dataset.wired) return;
     $('#pulse-tiles').dataset.wired = '1';
     $('#pulse-tiles').querySelectorAll('[data-metric]').forEach((b) => b.addEventListener('click', () => {
-      metric = b.dataset.metric;
-      $('#pulse-tiles').querySelectorAll('[data-metric]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
-      drawChart();
+      setPlaying(false);
+      pick(b.dataset.metric);
     }));
   };
+
+  /** Selects a tile and redraws the chart for it. */
+  const pick = (key) => {
+    metric = key;
+    $('#pulse-tiles').querySelectorAll('[data-metric]').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.metric === key)));
+    drawChart();
+  };
+
+  // Tour: step through the four tiles until the viewer pauses or picks one.
+  const playBtn = $('#pulse-play');
+  let timer = null;
+  const setPlaying = (on) => {
+    clearInterval(timer);
+    timer = null;
+    playBtn.setAttribute('aria-pressed', String(on));
+    playBtn.setAttribute('aria-label', on ? 'Pause the tour' : 'Play the tour');
+    $('#pulse').classList.toggle('touring', on);
+    if (!on) return;
+    timer = setInterval(() => {
+      if (!chartHost.isConnected) { clearInterval(timer); return; }
+      if (document.hidden || !data) return;
+      const i = TILES.findIndex(([k]) => k === metric);
+      pick(TILES[(i + 1) % TILES.length][0]);
+    }, 5000);
+  };
+  playBtn.addEventListener('click', () => setPlaying(playBtn.getAttribute('aria-pressed') !== 'true'));
+  setPlaying(!matchMedia('(prefers-reduced-motion: reduce)').matches);
 
   const show = async () => {
     const mine = ++seq;
@@ -200,7 +229,7 @@ function renderPulse(main) {
     drawTiles();
     if (first) drawChart();
     const name = windowName(win);
-    $('#pulse-note').textContent = `Numbers for the ${name}${d.previous ? ', compared with the period before' : ''}. Chart: every month on record.`;
+    $('#pulse-note').textContent = `${name[0].toUpperCase()}${name.slice(1)}${d.previous ? `, change vs the ${windowName(win).replace('last ', 'previous ')}` : ''}. Chart: every month on record, scaled so quiet months stay visible.`;
     $('#top-title').textContent = `Top of the ${name}`;
     const lp = listPeriod(win);
     $('#more-releases').href = `#/events?sort=sales${lp ? `&period=${lp}` : ''}`;
