@@ -125,7 +125,7 @@ const STATIC_ENDPOINTS = [
 
 /** Renders the API reference. */
 export async function renderApi(main) {
-  const origin = location.origin;
+  const origin = new URL('.', location.href).href.replace(/\/$/, '');
   const isStaticSite = await isStatic();
   const endpoints = isStaticSite ? STATIC_ENDPOINTS : ENDPOINTS;
   main.innerHTML = `

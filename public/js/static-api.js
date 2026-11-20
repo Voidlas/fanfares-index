@@ -6,7 +6,7 @@
  * row precomputed, and this module only filters, sorts and pages them,
  * with the same rules as worker/src/queries.js.
  */
-const BASE = '/api/v1';
+const BASE = 'api/v1';
 const PERIODS = new Set(['today', 'week', 'month', 'year']);
 /** Rolling windows the insights files are published for (snapshot/insights.mjs). */
 const INSIGHT_PERIODS = new Set(['7d', '30d', '90d', '365d', 'all']);
