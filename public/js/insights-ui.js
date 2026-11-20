@@ -7,11 +7,12 @@ import { avatar, displayName, esc, personHref, plural, releaseHref, satsShort, s
 
 /** Rolling windows published by the snapshot (snapshot/insights.mjs), in display order. */
 export const WINDOWS = [['7d', '7 days'], ['30d', '30 days'], ['90d', '90 days'], ['365d', '12 months'], ['all', 'All time']];
-const DEFAULT = '30d';
-const KEY = 'fanfares.insightPeriod';
+const DEFAULT = 'all';
+// v2: the default became all time; earlier saved picks are not carried over.
+const KEY = 'fanfares.insightPeriod.v2';
 const valid = (v) => WINDOWS.some(([k]) => k === v);
 
-/** The window this viewer picked last (a per-browser convenience), or 30 days. */
+/** The window this viewer picked last (a per-browser convenience), or all time. */
 export function savedWindow() {
   try { const v = localStorage.getItem(KEY); return valid(v) ? v : DEFAULT; } catch { return DEFAULT; }
 }

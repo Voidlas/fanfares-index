@@ -11,7 +11,15 @@ import {
 import { registerTracks } from '../player.js';
 
 const PAGE = 24;
-const CREATOR_SORTS = [['', 'Top earning'], ['buyers', 'Most supporters'], ['releases', 'Most events'], ['newest', 'Recently active']];
+const CREATOR_SORTS = [['', 'Top earner'], ['sales', 'Top seller'], ['releases', 'Most events'], ['newest', 'Recently active']];
+
+/** What the top three show for each sort: [figure HTML, context line HTML, include creator?]. */
+const PODIUM_BY_SORT = {
+  '': [(c) => `${satsShort(c.earnedSats)}<small>sats</small>`, (c) => `${plural(c.sales, 'sale')} · ${plural(c.buyers, 'supporter')}`, (c) => c.earnedSats > 0],
+  sales: [(c) => `${num(c.sales)}<small>${c.sales === 1 ? 'sale' : 'sales'}</small>`, (c) => `${satsShort(c.earnedSats)} sats · ${plural(c.buyers, 'supporter')}`, (c) => c.sales > 0],
+  releases: [(c) => `${num(c.releases)}<small>${c.releases === 1 ? 'event' : 'events'}</small>`, (c) => `${satsShort(c.earnedSats)} sats earned`, () => true],
+  newest: [(c) => `${agoShort(c.latestRelease)}<small>ago</small>`, (c) => `latest of ${plural(c.releases, 'event')}`, () => true]
+};
 
 /** Every row of a paged list endpoint (100 per request; the static API serves one file). */
 async function every(path, params) {
@@ -69,16 +77,15 @@ function creatorCard(c, rank, total, q) {
  */
 export async function renderCreators(main, query) {
   document.title = 'Creators · Fanfares Index';
-  const state = { q: '', sort: '', period: query.get('period') || '', shown: PAGE, items: [] };
+  const state = { q: '', sort: CREATOR_SORTS.some(([k]) => k === query.get('sort')) ? query.get('sort') : '', period: query.get('period') || '', shown: PAGE, items: [] };
   main.innerHTML = `
     <div class="page-head"><div class="eyebrow">Creators</div><h1>The people publishing on Fanfares</h1>
       <p>Ranked by what their audiences paid them, straight into their own wallets. Every figure is read from public payment receipts.</p></div>
-    <div class="toolbar"><div id="period"></div></div>
+    <div class="toolbar split"><div id="sort"></div><div id="period"></div></div>
     ${summary([['c-total', 'Creators earning'], ['c-sats', 'Paid to creators'], ['c-avg', 'Per creator'], ['c-top', 'Top 10 share']])}
     <div id="podium"></div>
     <div class="toolbar list-tools">
       <label class="search">${searchIcon}<input type="search" id="q" placeholder="Find a creator by name or NIP-05" aria-label="Search creators"></label>
-      <div id="sort"></div>
     </div>
     <div class="result-count" id="count" aria-live="polite"></div>
     <div class="cr-grid" id="grid"><div class="skeleton" style="height:260px"></div><div class="skeleton" style="height:260px"></div></div>
@@ -86,23 +93,24 @@ export async function renderCreators(main, query) {
   const $ = (sel) => main.querySelector(sel);
   const grid = $('#grid');
   const more = $('#more');
-  let all = [];
+  let ranked = [];
   let seq = 0;
 
   const paint = () => {
-    const total = all.reduce((n, c) => n + c.earnedSats, 0);
+    const total = ranked.reduce((n, c) => n + c.earnedSats, 0);
     const list = state.items;
-    const rankOf = new Map(all.map((c, i) => [c.pubkey, i + 1]));
+    const rankOf = new Map(ranked.map((c, i) => [c.pubkey, i + 1]));
     grid.innerHTML = list.length ? list.slice(0, state.shown).map((c) => creatorCard(c, rankOf.get(c.pubkey) || '', total, state.q)).join('')
       : `<div class="empty">No creators match “${esc(state.q)}”.</div>`;
     $('#count').innerHTML = `<b>${num(list.length)}</b> creator${list.length === 1 ? '' : 's'}${state.q ? ` matching “${esc(state.q)}”` : ''}`;
     more.hidden = state.shown >= list.length;
   };
 
+  /** The list below the podium: the ranking itself, or the creators matching a search. */
   const loadList = async () => {
     const mine = ++seq;
     grid.classList.add('loading');
-    const items = await every('/api/creators', { q: state.q, sort: state.sort, period: state.period });
+    const items = state.q ? await every('/api/creators', { q: state.q, sort: state.sort, period: state.period }) : ranked;
     if (mine !== seq) return;
     grid.classList.remove('loading');
     state.items = items;
@@ -110,33 +118,45 @@ export async function renderCreators(main, query) {
     paint();
   };
 
-  const loadPeriod = async () => {
-    all = await every('/api/creators', { period: state.period });
-    const earning = all.filter((c) => c.earnedSats > 0);
+  /** Re-ranks for the current sort and period: summary, podium, list. */
+  const refresh = async () => {
+    const mine = ++seq;
+    $('#podium').classList.add('loading');
+    const items = await every('/api/creators', { sort: state.sort, period: state.period });
+    if (mine !== seq) return;
+    $('#podium').classList.remove('loading');
+    ranked = items;
+    const earning = ranked.filter((c) => c.earnedSats > 0).sort((a, b) => b.earnedSats - a.earnedSats);
     const total = earning.reduce((n, c) => n + c.earnedSats, 0);
     const top10 = earning.slice(0, 10).reduce((n, c) => n + c.earnedSats, 0);
     tween($('#c-total'), earning.length);
-    $('#c-total-hint').textContent = `of ${num(all.length)} who have published`;
+    $('#c-total-hint').textContent = `of ${num(ranked.length)} ${state.period ? 'active in this period' : 'who have published'}`;
     tween($('#c-sats'), total, (v) => satsShort(v));
     $('#c-sats-hint').textContent = 'sats, peer to peer';
     tween($('#c-avg'), earning.length ? total / earning.length : 0, (v) => satsShort(v));
     $('#c-avg-hint').textContent = 'average sats earned';
     tween($('#c-top'), total ? (top10 / total) * 100 : 0, (v) => `${Math.round(v)}%`);
     $('#c-top-hint').textContent = 'of sats went to the top ten';
-    $('#podium').innerHTML = podium(earning, (c) => `${satsShort(c.earnedSats)}<small>sats</small>`,
-      (c) => `${plural(c.sales, 'sale')} · ${plural(c.buyers, 'supporter')}`);
+    const [figure, line, keep] = PODIUM_BY_SORT[state.sort];
+    $('#podium').innerHTML = podium(ranked.filter(keep), figure, line);
     await loadList();
   };
 
+  const syncUrl = () => {
+    const p = new URLSearchParams();
+    if (state.sort) p.set('sort', state.sort);
+    if (state.period) p.set('period', state.period);
+    history.replaceState(null, '', `#/creators${p.size ? `?${p}` : ''}`);
+  };
   let debounce;
   $('#q').addEventListener('input', (e) => {
     clearTimeout(debounce);
     debounce = setTimeout(() => { state.q = e.target.value.trim(); loadList(); }, 200);
   });
-  segmented($('#sort'), CREATOR_SORTS, state.sort, (v) => { state.sort = v; loadList(); }, 'Sort creators');
-  segmented($('#period'), PERIODS_SHORT, state.period, (v) => { state.period = v; loadPeriod(); }, 'Period');
+  segmented($('#sort'), CREATOR_SORTS, state.sort, (v) => { state.sort = v; syncUrl(); refresh(); }, 'Rank creators by');
+  segmented($('#period'), PERIODS_SHORT, state.period, (v) => { state.period = v; syncUrl(); refresh(); }, 'Period');
   more.addEventListener('click', () => { state.shown += PAGE; paint(); });
-  await loadPeriod();
+  await refresh();
 }
 
 /** A person's page: works for creators, buyers, or both. */
@@ -212,7 +232,7 @@ export async function renderSupporters(main, query) {
   main.innerHTML = `
     <div class="page-head"><div class="eyebrow">Supporters</div><h1>The people paying creators directly</h1>
       <p>No ads and no subscriptions: every sat here bought a piece of work outright, paid straight to the people who made it.</p></div>
-    <div class="toolbar"><div id="period"></div></div>
+    <div class="toolbar end"><div id="period"></div></div>
     ${summary([['s-total', 'Supporters'], ['s-sats', 'Sats spent'], ['s-avg', 'Per supporter'], ['s-repeat', 'Came back'], ['s-wide', 'Backed 2+ creators']])}
     <div id="podium"></div>
     <div class="section-head list-head"><h2>Leaderboard</h2><span class="muted" id="count"></span></div>

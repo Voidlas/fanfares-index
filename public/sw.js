@@ -7,7 +7,7 @@
  * offline visit still opens. Cross-origin requests (cover art, fonts,
  * relays) are left to the browser.
  */
-const CACHE = 'fanfares-index-v1';
+const CACHE = 'fanfares-index-v2';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css', 'img/logo.png', 'img/icon-192.png',
   'js/app.js', 'js/api.js', 'js/static-api.js', 'js/ui.js', 'js/nostr.js', 'js/player.js', 'js/charts.js',
