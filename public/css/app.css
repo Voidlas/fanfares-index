@@ -80,7 +80,7 @@ button, input, select { font: inherit; color: inherit; }
 .boards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 32px; }
 .board-title { display: flex; justify-content: space-between; align-items: baseline; margin: 0 0 10px; font-size: 15px; font-weight: 600; }
 .board-title .more { color: var(--ink-3); font-size: 13px; font-weight: 500; }
-@media (max-width: 900px) { .boards { grid-template-columns: 1fr; gap: 28px; } }
+@media (max-width: 900px) { .boards { grid-template-columns: minmax(0, 1fr); gap: 28px; } }
 .eyebrow { font-size: 12px; font-weight: 500; color: var(--ink-3); letter-spacing: 0; }
 .muted { color: var(--ink-3); }
 .mono { font-family: var(--mono); font-size: 0.9em; }
@@ -296,8 +296,36 @@ details.raw pre { margin: 12px 0 0; max-height: 440px; overflow: auto; padding: 
 .tabs button[aria-selected="true"] { color: var(--ink); box-shadow: inset 0 -1px 0 var(--ink); }
 .tabs .count { color: var(--ink-4); margin-left: 6px; font-variant-numeric: tabular-nums; }
 
+/* ---------- home ---------- */
+.home-hero { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 48px; align-items: center; }
+.home-hero .hero h1 { font-size: clamp(38px, 5.4vw, 66px); }
+.home-hero .hero p.lede { margin-bottom: 26px; }
+.hero-card { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: 28px; min-width: 0; }
+.hero-card .big { font-size: clamp(40px, 5.2vw, 60px); font-weight: 600; letter-spacing: -0.05em; line-height: 1; margin: 12px 0 10px; font-variant-numeric: tabular-nums; }
+.hero-card .big small { font-size: 16px; letter-spacing: 0; color: var(--ink-3); font-weight: 500; margin-left: 8px; }
+.hero-card .sub { color: var(--ink-2); font-size: 14px; }
+.hero-facts { display: grid; grid-template-columns: repeat(3, 1fr); margin: 22px 0; padding: 16px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.hero-facts b { display: block; font-size: 20px; font-weight: 600; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+.hero-facts span { font-size: 12.5px; color: var(--ink-3); }
+.hero-card .hero-covers { height: auto; }
+.section-head.wrap { flex-wrap: wrap; align-items: center; }
+.pulse-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: -8px -8px 20px; }
+.pulse-tile { display: flex; flex-direction: column; gap: 2px; text-align: left; font: inherit; color: inherit; cursor: pointer; background: transparent;
+  border: 1px solid transparent; border-radius: var(--radius-sm); padding: 14px 16px; transition: background 0.15s, border-color 0.15s; min-width: 0; }
+@media (hover: hover) { .pulse-tile:hover { background: var(--hover); } }
+.pulse-tile[aria-pressed="true"] { background: var(--surface-2); border-color: var(--line-strong); }
+.pulse-tile .label { font-size: 12.5px; color: var(--ink-3); }
+.pulse-tile .value { font-size: 28px; font-weight: 600; letter-spacing: -0.035em; font-variant-numeric: tabular-nums; }
+.pulse-tile .hint { font-size: 12.5px; color: var(--ink-3); }
+.pulse-foot { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--ink-3); }
+.pulse-foot .more { color: var(--ink-2); font-weight: 500; white-space: nowrap; }
+.insight-card { display: block; color: inherit; transition: border-color 0.15s; }
+@media (hover: hover) { .insight-card:hover { border-color: var(--line-strong); } }
+.insight-card .big-num { font-size: 34px; font-weight: 600; letter-spacing: -0.04em; margin: 10px 0 4px; font-variant-numeric: tabular-nums; }
+
 /* ---------- insights ---------- */
 .ins-stats { margin-top: 0; }
+.ins-compare { font-size: 13px; }
 .ins-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .ins-note { margin: 14px 0 0; font-size: 12.5px; color: var(--ink-3); }
 #ins-prices th, #ins-prices td { padding-right: 8px; }
@@ -381,6 +409,8 @@ code { font: 12px var(--mono); background: var(--surface-2); border: 1px solid v
   .stat:nth-child(n+4) { border-top: 1px solid var(--line); }
   .grid-2, .grid-2.even { grid-template-columns: 1fr; gap: 56px; }
   .ins-grid { grid-template-columns: 1fr; }
+  .home-hero { grid-template-columns: 1fr; gap: 32px; }
+  .pulse-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .live-grid { gap: 16px; }
   .live-grid > :last-child { order: -1; }
   .detail { grid-template-columns: 1fr; gap: 32px; }

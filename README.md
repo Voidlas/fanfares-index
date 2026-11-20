@@ -91,7 +91,8 @@ Static API, under `/api/v1/`:
 | `meta.json` | build time, last crawl, recent sync runs with relay results, event counts by role |
 | `overview.json`, `overview.test.json` | index totals and monthly series (`.test` counts test releases) |
 | `activity.json`, `activity.test.json` | newest 100 sales, releases and comments |
-| `insights.json`, `insights.test.json` | trends for the Insights page: monthly sales, sats, new buyers and releases; last 30 days vs the 30 before; price bands, payment rails, buyer loyalty, top earners |
+| `insights/{7d,30d,90d,365d,all}[.test].json` | per rolling window: headline numbers vs the window before, price bands, payment rails, buyer loyalty, creator concentration, top releases, creators and supporters; plus the full monthly history |
+| `insights.json`, `insights.test.json` | the 30-day window (kept for older links) |
 | `releases/{all,today,week,month,year}.json` | every listed release card, stats counted in that window; test releases flagged `isTest` |
 | `release/{key}.json` | one release; `key` = first 32 hex chars of `sha256(address)`; `release/ids.json` maps revision ids to keys |
 | `creators/{period}[.test].json`, `supporters/{period}[.test].json` | full rankings in default order (`period` = all, today, week, month, year) |

@@ -66,7 +66,7 @@ export function duration(sec) {
 export const plural = (n, word) => `${num(n)} ${word}${n === 1 ? '' : 's'}`;
 
 /** Display name, falling back to a short npub for people without profiles. */
-export const displayName = (p) => p?.name || shortNpub(p?.pubkey) || 'Unknown';
+export const displayName = (p) => p?.name?.trim() || shortNpub(p?.pubkey) || 'Unknown';
 
 /** Round avatar with a lettered fallback when the profile has no picture. */
 export function avatar(p, size = 36) {

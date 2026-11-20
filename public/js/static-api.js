@@ -8,6 +8,8 @@
  */
 const BASE = '/api/v1';
 const PERIODS = new Set(['today', 'week', 'month', 'year']);
+/** Rolling windows the insights files are published for (snapshot/insights.mjs). */
+const INSIGHT_PERIODS = new Set(['7d', '30d', '90d', '365d', 'all']);
 const files = new Map();
 
 /** Fetches (once per page load) and parses a JSON file under /api/v1/. */
@@ -159,7 +161,10 @@ export async function staticGet(path, params) {
   if ((m = path.match(/^\/api\/people\/([0-9a-f]{64})$/))) return person(m[1], params);
   if (path === '/api/supporters') return supporters(params);
   if (path === '/api/activity') return activity(params);
-  if (path === '/api/insights') return load(`insights${listParams(params).includeTest ? '.test' : ''}.json`);
+  if (path === '/api/insights') {
+    const period = INSIGHT_PERIODS.has(params.period) ? params.period : '30d';
+    return load(`insights/${period}${listParams(params).includeTest ? '.test' : ''}.json`);
+  }
   if (path === '/api/sync') return sync();
   throw Object.assign(new Error('unknown endpoint'), { status: 404 });
 }

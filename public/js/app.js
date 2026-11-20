@@ -21,7 +21,7 @@ const ROUTES = [
   [/^\/creators$/, 'creators', (m, q) => renderCreators(main, q)],
   [/^\/p\/([0-9a-f]{64})$/, 'creators', (m) => renderPerson(main, m[1])],
   [/^\/supporters$/, 'supporters', (m, q) => renderSupporters(main, q)],
-  [/^\/insights$/, 'insights', () => renderInsights(main)],
+  [/^\/insights$/, 'insights', (m, q) => renderInsights(main, q)],
   [/^\/live$/, 'live', () => renderLive(main)],
   [/^\/api$/, 'api', () => renderApi(main)]
 ];
