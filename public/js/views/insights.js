@@ -9,14 +9,14 @@
 import { get, isStatic } from '../api.js';
 import { hbars, monthlyBars } from '../charts.js';
 import { buyerRows, change, creatorRows, listPeriod, pct, releaseRows, savedWindow, WINDOWS, windowName, windowSwitch } from '../insights-ui.js';
-import { ago, compact, esc, num, plural } from '../ui.js';
+import { ago, compact, esc, kindPlural, num, plural } from '../ui.js';
 
 /** Monthly chart panels: [host id, title, subtitle, series key, value formatter, tooltip extra]. */
 const CHARTS = [
   ['ch-sats', 'Sats paid to creators', 'Every purchase, by the month it was paid', 'sats', (v) => `${num(v)} sats`, (m) => plural(m.sales, 'purchase')],
   ['ch-sales', 'Purchases', 'Count of purchases, whatever the price', 'sales', (v) => plural(v, 'purchase'), (m) => `${num(m.sats)} sats`],
   ['ch-buyers', 'New buyers', 'People making their first purchase', 'newBuyers', (v) => plural(v, 'new buyer'), null],
-  ['ch-releases', 'New releases', 'Releases published, and creators publishing their first', 'releases', (v) => plural(v, 'release'),
+  ['ch-releases', 'Events published', 'Events published, and creators publishing their first', 'releases', (v) => plural(v, 'event'),
     (m) => (m.newCreators ? plural(m.newCreators, 'new creator') : '')]
 ];
 
@@ -30,7 +30,7 @@ export async function renderInsights(main, query) {
   let win = WINDOWS.some(([k]) => k === query.get('period')) ? query.get('period') : savedWindow();
   main.innerHTML = `
     <div class="page-head"><div class="eyebrow">Insights</div><h1>How Fanfares is growing</h1>
-      <p id="ins-lede">Trends from every purchase and release in the archive, recomputed with each hourly snapshot.</p></div>
+      <p id="ins-lede">Trends from every purchase and published event in the archive, recomputed with each hourly snapshot.</p></div>
     <div class="filters"><div id="ins-window"></div><span class="muted ins-compare" id="ins-compare"></span></div>
     <div class="stats ins-stats" id="ins-stats">${Array.from({ length: 5 }, () => '<div class="stat"><div class="skeleton" style="height:60px"></div></div>').join('')}</div>
 
@@ -45,7 +45,7 @@ export async function renderInsights(main, query) {
         <div class="panel-sub" id="ins-conc-sub"></div>
         <div id="ins-conc"></div>
         <h3 style="margin-top:32px">Sats by format</h3>
-        <div class="panel-sub">What each type of release earned</div>
+        <div class="panel-sub">What each format earned</div>
         <div id="ins-kinds"></div>
       </div>
       <div class="panel">
@@ -63,7 +63,7 @@ export async function renderInsights(main, query) {
     <section class="section">
       <div class="section-head"><h2 id="ins-top-title">Top of the period</h2></div>
       <div class="boards">
-        <div><h3 class="board-title">Releases <a class="more" id="ins-more-releases">View all</a></h3><div class="rows" id="ins-top-releases"></div></div>
+        <div><h3 class="board-title">Events <a class="more" id="ins-more-releases">View all</a></h3><div class="rows" id="ins-top-releases"></div></div>
         <div><h3 class="board-title">Creators <a class="more" id="ins-more-creators">View all</a></h3><div class="rows" id="ins-top-creators"></div></div>
         <div><h3 class="board-title">Supporters <a class="more" id="ins-more-supporters">View all</a></h3><div class="rows" id="ins-top-buyers"></div></div>
       </div>
@@ -106,7 +106,7 @@ function renderWindow(main, d, win) {
   const c = d.current;
   const p = d.previous;
   const $ = (id) => main.querySelector(id);
-  $('#ins-lede').textContent = `Trends from every purchase and release in the archive, recomputed with each hourly snapshot (this one ${ago(d.builtAt)}).`;
+  $('#ins-lede').textContent = `Trends from every purchase and published event in the archive, recomputed with each hourly snapshot (this one ${ago(d.builtAt)}).`;
   $('#ins-compare').textContent = p ? `Compared with the ${WINDOWS.find(([k]) => k === win)[1]} before` : 'Everything since the first sale';
 
   $('#ins-stats').innerHTML = [
@@ -114,17 +114,17 @@ function renderWindow(main, d, win) {
     ['Purchases', num(c.sales), change(c.sales, p?.sales, d)],
     ['Buyers', num(c.buyers), change(c.buyers, p?.buyers, d)],
     ['New buyers', num(c.newBuyers), change(c.newBuyers, p?.newBuyers, d)],
-    ['New releases', num(c.releases), `${plural(c.newCreators, 'new creator')} · ${change(c.releases, p?.releases, d)}`]
+    ['New events', num(c.releases), `${plural(c.newCreators, 'new creator')} · ${change(c.releases, p?.releases, d)}`]
   ].map(([label, value, hint]) => `<div class="stat"><div class="label">${esc(label)}</div>
     <div class="value">${value}</div><div class="hint">${esc(hint)}</div></div>`).join('');
 
-  $('#ins-prices-sub').textContent = `Listed releases by price in sats, and what they sold in the ${name}`;
+  $('#ins-prices-sub').textContent = `Published events by price in sats, and what they sold in the ${name}`;
   $('#ins-prices').innerHTML = `<table>
-    <thead><tr><th>Price</th><th class="r">Releases</th><th class="r">Selling</th><th class="r">Sales</th><th class="r">Sats</th></tr></thead>
+    <thead><tr><th>Price</th><th class="r">Events</th><th class="r">Selling</th><th class="r">Sales</th><th class="r">Sats</th></tr></thead>
     <tbody>${d.priceBands.filter((b) => b.releases).map((b) => `<tr><td class="nowrap">${esc(b.label)}</td>
       <td class="r num">${num(b.releases)}</td><td class="r num muted">${pct(b.sellingReleases / b.releases)}</td>
       <td class="r num">${num(b.sales)}</td><td class="r num">${num(b.sats)}</td></tr>`).join('')}</tbody></table>
-    <p class="ins-note">“Selling” is the share of releases in the band with at least one purchase in the period.</p>`;
+    <p class="ins-note">“Selling” is the share of events in the band with at least one purchase in the period.</p>`;
 
   const conc = d.concentration;
   $('#ins-conc-sub').textContent = c.sats
@@ -135,7 +135,7 @@ function renderWindow(main, d, win) {
     { label: 'Top 5', count: conc.top5Share },
     { label: 'Everyone else', count: Math.max(0, 1 - conc.top5Share) }
   ], { format: pct }) : '';
-  $('#ins-kinds').innerHTML = hbars(d.kinds.map((k) => ({ label: `${k.label}s`, count: k.sats })), { format: compact });
+  $('#ins-kinds').innerHTML = hbars(d.kinds.map((k) => ({ label: kindPlural(k.kind), count: k.sats })), { format: compact });
 
   $('#ins-repeat-sub').textContent = c.buyers
     ? `${pct(d.repeatBuyers / c.buyers)} of ${plural(c.buyers, 'buyer')} bought more than once in the ${name}`
@@ -146,7 +146,7 @@ function renderWindow(main, d, win) {
 
   $('#ins-top-title').textContent = `Top of the ${name}`;
   const lp = listPeriod(win);
-  $('#ins-more-releases').href = `#/releases?sort=sales${lp ? `&period=${lp}` : ''}`;
+  $('#ins-more-releases').href = `#/events?sort=sales${lp ? `&period=${lp}` : ''}`;
   $('#ins-more-creators').href = `#/creators${lp ? `?period=${lp}` : ''}`;
   $('#ins-more-supporters').href = `#/supporters${lp ? `?period=${lp}` : ''}`;
   $('#ins-top-releases').innerHTML = releaseRows(d.topReleases, 5);

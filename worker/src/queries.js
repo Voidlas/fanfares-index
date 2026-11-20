@@ -183,6 +183,7 @@ export function listCreators(model, { q, sort, period, limit, offset, includeTes
   }));
   const order = {
     releases: (a, b) => b.releases - a.releases,
+    sales: (a, b) => b.sales - a.sales || b.earned - a.earned,
     newest: (a, b) => b.latest - a.latest,
     buyers: (a, b) => b.buyers - a.buyers
   }[sort] || ((a, b) => b.earned - a.earned || b.releases - a.releases);

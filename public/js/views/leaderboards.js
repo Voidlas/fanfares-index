@@ -1,5 +1,5 @@
 /**
- * Home-page leaderboards: best-selling releases, highest-earning creators and
+ * Home-page leaderboards: best-selling events, highest-earning creators and
  * biggest supporters, switchable between Today, This week, This month and
  * All time. Each board links to its full ranking for the same period.
  */
@@ -34,7 +34,7 @@ export async function renderLeaderboards(host) {
   const load = async (period) => {
     const mine = ++seq;
     const q = period ? `&period=${period}` : '';
-    host.querySelector('#lb-more-sales').href = `#/releases?sort=sales${q}`;
+    host.querySelector('#lb-more-sales').href = `#/events?sort=sales${q}`;
     host.querySelector('#lb-more-earners').href = `#/creators${period ? `?period=${period}` : ''}`;
     host.querySelector('#lb-more-supporters').href = `#/supporters${period ? `?period=${period}` : ''}`;
     for (const id of ['#lb-sales', '#lb-earners', '#lb-supporters']) host.querySelector(id).innerHTML = '<div class="skeleton" style="height:260px"></div>';

@@ -4,10 +4,10 @@
  *   hero          what the index is, and the all-time sats paid to creators
  *   pulse         a period switch (7 days to all time) over four headline
  *                 numbers; each tile picks the monthly trend chart below it
- *   top           releases, creators and supporters of that period
+ *   top           events, creators and supporters of that period
  *   inside        four insight cards: price points, concentration, loyalty, rails
- *   shelves       all-time best sellers and just released, with artwork
- *   now           the live activity feed, formats and what the archive holds
+ *   shelves       all-time best sellers and just published, with artwork
+ *   now           the real-time activity feed, formats and what the archive holds
  *
  * The pulse, top lists and insight cards come from /api/insights (static
  * snapshot only); other deployments fall back to the period leaderboards.
@@ -17,8 +17,9 @@ import { hbars, monthlyBars } from '../charts.js';
 import {
   buyerRows, change, creatorRows, listPeriod, monthYear, pct, releaseRows, savedWindow, windowName, windowSwitch
 } from '../insights-ui.js';
-import { compact, cover, esc, gridSkeleton, num, plural, releaseGrid, releaseHref } from '../ui.js';
-import { feedItems } from './feed.js';
+import { compact, cover, esc, gridSkeleton, kindPlural, num, plural, releaseGrid, releaseHref, tween } from '../ui.js';
+import { liveFeed } from './feed.js';
+import { liveBadge } from './live.js';
 import { renderLeaderboards } from './leaderboards.js';
 
 /** Pulse tiles: [key in insights.current, label, monthly series key, chart label, value formatter]. */
@@ -26,7 +27,7 @@ const TILES = [
   ['sats', 'Sats paid', 'sats', 'Sats paid to creators', (v) => `${num(v)} sats`],
   ['sales', 'Purchases', 'sales', 'Purchases', (v) => plural(v, 'purchase')],
   ['newBuyers', 'New buyers', 'newBuyers', 'New buyers', (v) => plural(v, 'new buyer')],
-  ['releases', 'New releases', 'releases', 'New releases', (v) => plural(v, 'release')]
+  ['releases', 'New events', 'releases', 'Events published', (v) => plural(v, 'event')]
 ];
 
 const skeleton = (h) => `<div class="skeleton" style="height:${h}px"></div>`;
@@ -38,10 +39,10 @@ export async function renderHome(main) {
       <div class="hero">
         <span class="live-dot">Live from Nostr · updated every hour</span>
         <h1>Everything that has ever happened<span class="accent"> on Fanfares.</span></h1>
-        <p class="lede">Every release, creator and buyer, and the zap receipts behind every purchase, indexed from Nostr
+        <p class="lede">Every published event, creator and buyer, and the zap receipts behind every purchase, indexed from Nostr
           and open through one API.</p>
         <div class="hero-actions">
-          <a class="btn primary" href="#/releases">Search the archive</a>
+          <a class="btn primary" href="#/search"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="5.2" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M11 11l3.5 3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>Instant Fanfares search</a>
           <a class="btn" href="#/insights">Explore insights</a>
         </div>
       </div>
@@ -49,7 +50,9 @@ export async function renderHome(main) {
     </section>
 
     <section class="section pulse" id="pulse">
-      <div class="section-head wrap"><h2>The pulse</h2><div id="pulse-window"></div></div>
+      <div class="section-head wrap"><h2 class="pulse-title">The pulse <button class="play-btn" id="pulse-play" aria-label="Pause the tour" aria-pressed="true">
+        <svg class="i-pause" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><rect x="2" y="1.5" width="2.6" height="9" rx="1" fill="currentColor"/><rect x="7.4" y="1.5" width="2.6" height="9" rx="1" fill="currentColor"/></svg>
+        <svg class="i-play" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 1.6v8.8L10.4 6z" fill="currentColor"/></svg></button></h2><div id="pulse-window"></div></div>
       <div class="panel">
         <div class="pulse-tiles" id="pulse-tiles">${TILES.map(() => `<div class="pulse-tile">${skeleton(64)}</div>`).join('')}</div>
         <div id="pulse-chart">${skeleton(240)}</div>
@@ -60,7 +63,7 @@ export async function renderHome(main) {
     <section class="section" id="top">
       <div class="section-head"><h2 id="top-title">Top of the period</h2></div>
       <div class="boards">
-        <div><h3 class="board-title">Releases <a class="more" id="more-releases">View all</a></h3><div class="rows" id="top-releases">${skeleton(260)}</div></div>
+        <div><h3 class="board-title">Events <a class="more" id="more-releases">View all</a></h3><div class="rows" id="top-releases">${skeleton(260)}</div></div>
         <div><h3 class="board-title">Creators <a class="more" id="more-creators">View all</a></h3><div class="rows" id="top-creators">${skeleton(260)}</div></div>
         <div><h3 class="board-title">Supporters <a class="more" id="more-supporters">View all</a></h3><div class="rows" id="top-buyers">${skeleton(260)}</div></div>
       </div>
@@ -72,18 +75,19 @@ export async function renderHome(main) {
     </section>
 
     <section class="section">
-      <div class="section-head"><h2>All-time best sellers</h2><a class="more" href="#/releases?sort=sales">View all</a></div>
+      <div class="section-head"><h2>All-time best sellers</h2><a class="more" href="#/events?sort=sales">View all</a></div>
       <div id="best" class="shelf">${gridSkeleton(6)}</div>
     </section>
 
     <section class="section grid-2">
       <div>
-        <div class="section-head"><h2>Happening now</h2><a class="more" href="#/live">View all</a></div>
-        <div id="feed"></div>
+        <div class="section-head"><h2 class="with-badge">What’s happening on Fanfares ${liveBadge}</h2><a class="more" href="#/live">Open live view</a></div>
+        <div class="live-status" id="feed-status">Connecting to relays…</div>
+        <div class="panel feed-panel" id="feed"><div class="skeleton" style="height:360px;margin:16px 0"></div></div>
       </div>
       <div class="panel">
         <h3>What's published</h3>
-        <div class="panel-sub">Releases by type</div>
+        <div class="panel-sub">Published events by format</div>
         <div id="kinds"></div>
         <h3 style="margin-top:32px">On the record</h3>
         <div class="panel-sub">Signed events in the archive</div>
@@ -92,7 +96,7 @@ export async function renderHome(main) {
     </section>
 
     <section class="section">
-      <div class="section-head"><h2>Just released</h2><a class="more" href="#/releases">View all</a></div>
+      <div class="section-head"><h2>Just published</h2><a class="more" href="#/events">View all</a></div>
       <div id="newest" class="shelf">${gridSkeleton(6)}</div>
     </section>`;
 
@@ -106,11 +110,11 @@ export async function renderHome(main) {
     renderLeaderboards($('#top'));
   }
 
-  const [ov, best, newest, feed] = await Promise.all([
+  liveFeed($('#feed'), { limit: 8, pin: true, status: $('#feed-status') });
+  const [ov, best, newest] = await Promise.all([
     get('/api/overview'),
     get('/api/releases', { sort: 'sales', limit: 12 }),
-    get('/api/releases', { sort: 'newest', limit: 6 }),
-    get('/api/activity', { limit: 8 })
+    get('/api/releases', { sort: 'newest', limit: 6 })
   ]);
   if (!$('#headline')) return;
 
@@ -125,7 +129,7 @@ export async function renderHome(main) {
     <div class="sub">${num(ov.sales)} purchases by ${num(ov.buyers)} people${firstMonth ? ` since ${monthYear(Date.parse(`${firstMonth}-01T00:00:00Z`) / 1000)}` : ''},
       settled peer to peer</div>
     <div class="hero-facts">
-      <div><b>${num(ov.releases)}</b><span>releases</span></div>
+      <div><b>${num(ov.releases)}</b><span>events</span></div>
       <div><b>${num(ov.creators)}</b><span>creators</span></div>
       <div><b>${num(ov.verifiedSales)}</b><span>verified sales</span></div>
     </div>
@@ -133,8 +137,7 @@ export async function renderHome(main) {
 
   $('#best').innerHTML = releaseGrid(best.items.slice(0, 6));
   $('#newest').innerHTML = releaseGrid(newest.items);
-  $('#feed').innerHTML = feedItems(feed);
-  $('#kinds').innerHTML = hbars(ov.byKind.map((k) => ({ label: `${k.label}s`, count: k.count })));
+  $('#kinds').innerHTML = hbars(ov.byKind.filter((k) => k.count).map((k) => ({ label: kindPlural(k.kind), count: k.count })));
   const a = ov.archive;
   $('#archive').innerHTML = hbars([
     { label: 'Payments', count: ov.payments },
@@ -169,18 +172,53 @@ function renderPulse(main) {
   const drawTiles = () => {
     const c = data.current;
     const p = data.previous;
-    $('#pulse-tiles').innerHTML = TILES.map(([key, label]) => `
-      <button class="pulse-tile" data-metric="${key}" aria-pressed="${key === metric}">
-        <span class="label">${esc(label)}</span>
-        <span class="value">${key === 'sats' ? compact(c[key]) : num(c[key])}</span>
-        <span class="hint">${esc(change(c[key], p?.[key], data))}</span>
-      </button>`).join('');
+    if (!$('#pulse-tiles [data-metric]')) {
+      $('#pulse-tiles').innerHTML = TILES.map(([key, label]) => `
+        <button class="pulse-tile" data-metric="${key}" aria-pressed="${key === metric}">
+          <span class="label">${esc(label)}</span><span class="value"></span><span class="hint"></span>
+        </button>`).join('');
+    }
+    for (const [key] of TILES) {
+      const tile = $(`#pulse-tiles [data-metric="${key}"]`);
+      tween(tile.querySelector('.value'), c[key], key === 'sats' ? compact : num);
+      const hint = change(c[key], p?.[key], data);
+      tile.querySelector('.hint').textContent = hint;
+      tile.querySelector('.hint').className = `hint${hint.startsWith('↑') ? ' up' : hint.startsWith('↓') ? ' down' : ''}`;
+    }
+    if ($('#pulse-tiles').dataset.wired) return;
+    $('#pulse-tiles').dataset.wired = '1';
     $('#pulse-tiles').querySelectorAll('[data-metric]').forEach((b) => b.addEventListener('click', () => {
-      metric = b.dataset.metric;
-      $('#pulse-tiles').querySelectorAll('[data-metric]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
-      drawChart();
+      setPlaying(false);
+      pick(b.dataset.metric);
     }));
   };
+
+  /** Selects a tile and redraws the chart for it. */
+  const pick = (key) => {
+    metric = key;
+    $('#pulse-tiles').querySelectorAll('[data-metric]').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.metric === key)));
+    drawChart();
+  };
+
+  // Tour: step through the four tiles until the viewer pauses or picks one.
+  const playBtn = $('#pulse-play');
+  let timer = null;
+  const setPlaying = (on) => {
+    clearInterval(timer);
+    timer = null;
+    playBtn.setAttribute('aria-pressed', String(on));
+    playBtn.setAttribute('aria-label', on ? 'Pause the tour' : 'Play the tour');
+    $('#pulse').classList.toggle('touring', on);
+    if (!on) return;
+    timer = setInterval(() => {
+      if (!chartHost.isConnected) { clearInterval(timer); return; }
+      if (document.hidden || !data) return;
+      const i = TILES.findIndex(([k]) => k === metric);
+      pick(TILES[(i + 1) % TILES.length][0]);
+    }, 5000);
+  };
+  playBtn.addEventListener('click', () => setPlaying(playBtn.getAttribute('aria-pressed') !== 'true'));
+  setPlaying(!matchMedia('(prefers-reduced-motion: reduce)').matches);
 
   const show = async () => {
     const mine = ++seq;
@@ -191,10 +229,10 @@ function renderPulse(main) {
     drawTiles();
     if (first) drawChart();
     const name = windowName(win);
-    $('#pulse-note').textContent = `Numbers for the ${name}${d.previous ? ', compared with the period before' : ''}. Chart: every month on record.`;
+    $('#pulse-note').textContent = `${name[0].toUpperCase()}${name.slice(1)}${d.previous ? `, change vs the ${windowName(win).replace('last ', 'previous ')}` : ''}. Chart: every month on record, scaled so quiet months stay visible.`;
     $('#top-title').textContent = `Top of the ${name}`;
     const lp = listPeriod(win);
-    $('#more-releases').href = `#/releases?sort=sales${lp ? `&period=${lp}` : ''}`;
+    $('#more-releases').href = `#/events?sort=sales${lp ? `&period=${lp}` : ''}`;
     $('#more-creators').href = `#/creators${lp ? `?period=${lp}` : ''}`;
     $('#more-supporters').href = `#/supporters${lp ? `?period=${lp}` : ''}`;
     $('#top-releases').innerHTML = releaseRows(d.topReleases, 5);
@@ -221,7 +259,7 @@ function insideCards(d, name) {
 
   return [
     card('Price points that sell', `${pct(topBand.sats / c.sats)}`,
-      `of sats came from releases priced ${topBand.label} sats; the most purchases were at ${mostSold.label}.`,
+      `of sats came from events priced ${topBand.label} sats; the most purchases were at ${mostSold.label}.`,
       hbars(bands.map((b) => ({ label: b.label, count: b.sats })), { format: compact })),
     card('Where the money goes', pct(d.concentration.topCreatorShare),
       `of sats went to the top creator, and ${pct(d.concentration.top5Share)} to the top five, of ${plural(c.creatorsPaid, 'creator')} paid.`,

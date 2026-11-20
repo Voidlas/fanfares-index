@@ -6,7 +6,7 @@
  * row precomputed, and this module only filters, sorts and pages them,
  * with the same rules as worker/src/queries.js.
  */
-const BASE = '/api/v1';
+const BASE = 'api/v1';
 const PERIODS = new Set(['today', 'week', 'month', 'year']);
 /** Rolling windows the insights files are published for (snapshot/insights.mjs). */
 const INSIGHT_PERIODS = new Set(['7d', '30d', '90d', '365d', 'all']);
@@ -102,7 +102,8 @@ async function creators(p) {
   const order = {
     releases: (a, b) => b.releases - a.releases,
     newest: (a, b) => b.latestRelease - a.latestRelease,
-    buyers: (a, b) => b.buyers - a.buyers
+    buyers: (a, b) => b.buyers - a.buyers,
+    sales: (a, b) => b.sales - a.sales || b.earnedSats - a.earnedSats
   }[o.sort] || ((a, b) => b.earnedSats - a.earnedSats || b.releases - a.releases);
   const rows = items.filter((r) => !q || r.pubkey === o.q || r._s.includes(q))
     .sort((a, b) => order(a, b) || b.latestRelease - a.latestRelease || byKey(a.pubkey, b.pubkey));

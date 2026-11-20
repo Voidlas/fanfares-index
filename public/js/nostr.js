@@ -94,3 +94,20 @@ export function fanfaresProfileUrl(hex) {
   const n = npub(hex);
   return n ? `https://fanfares.io/p/${n}` : '';
 }
+
+/** Hex pubkey from an npub (checksum verified), or '' when it is not one. */
+export function decodeNpub(value) {
+  const s = String(value || '').trim().toLowerCase().replace(/^nostr:/, '');
+  if (!/^npub1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{58}$/.test(s)) return '';
+  const words = [...s.slice(5)].map((c) => CHARSET.indexOf(c));
+  if (polymod([...hrpExpand('npub'), ...words]) !== 1) return '';
+  let acc = 0;
+  let bits = 0;
+  const bytes = [];
+  for (const w of words.slice(0, -6)) {
+    acc = (acc << 5) | w;
+    bits += 5;
+    if (bits >= 8) { bits -= 8; bytes.push((acc >>> bits) & 255); }
+  }
+  return bytes.length === 32 ? bytes.map((b) => b.toString(16).padStart(2, '0')).join('') : '';
+}

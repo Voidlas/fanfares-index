@@ -1,43 +1,60 @@
 /**
- * Release browser (search, type filter, sort, paging) and the release
- * detail page (preview, price, revenue split, buyers, payments, comments,
- * raw signed event).
+ * Events: the catalog of everything published through Fanfares (search,
+ * format tiles, sort, period, paging) and one event's detail page (preview,
+ * price, revenue split, buyers, payments, comments, raw signed event).
  */
-import { get } from '../api.js';
+import { get, isStatic } from '../api.js';
 import { fanfaresUrl } from '../nostr.js';
 import {
-  ago, avatar, copy, cover, date, displayName, duration, esc, periodSelect, gridSkeleton, num, personHref, releaseGrid, sats, whenCell
+  PERIODS_SHORT, ago, avatar, copy, cover, date, displayName, duration, esc, gridSkeleton, kindName, kindPlural, num, personHref,
+  releaseGrid, sats, satsShort, searchIcon, segmented, tween, whenCell
 } from '../ui.js';
 import { registerTracks } from '../player.js';
 
-const KINDS = [['', 'All'], ['31338', 'Podcasts'], ['31339', 'Audiobooks'], ['31337', 'Tracks'], ['36787', 'Music'], ['30023', 'Articles'], ['1', 'Notes']];
-const SORTS = [['newest', 'Newest'], ['sales', 'Best selling'], ['earned', 'Most earned'], ['price', 'Highest price'], ['oldest', 'Oldest']];
+const SORTS = [['newest', 'Newest'], ['sales', 'Best selling'], ['earned', 'Top earning'], ['price', 'Price']];
 const PAGE = 24;
 
-const searchIcon = '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="5.2" stroke="currentColor" stroke-width="1.6" fill="none"/><path d="M11 11l3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
+/**
+ * Format tiles: one per kind that has published events (empty formats are
+ * left out), with all-time earnings where the snapshot publishes them.
+ */
+async function formatTiles() {
+  const [ov, ins] = await Promise.all([get('/api/overview'), (await isStatic()) ? get('/api/insights', { period: 'all' }).catch(() => null) : null]);
+  const earned = new Map((ins?.kinds || []).map((k) => [k.kind, k.sats]));
+  const byName = new Map();
+  for (const k of ov.byKind) {
+    if (!k.count) continue;
+    const name = kindPlural(k.kind);
+    const t = byName.get(name) || { name, kind: k.kind, count: 0, top: 0, sats: 0 };
+    t.count += k.count;
+    t.sats += earned.get(k.kind) || 0;
+    if (k.count > t.top) { t.top = k.count; t.kind = k.kind; }
+    byName.set(name, t);
+  }
+  return { total: ov.releases, earned: ins ? ins.current.sats : null, tiles: [...byName.values()].sort((a, b) => b.count - a.count) };
+}
 
 /**
- * Renders the release browser; filter state lives in the URL query so
+ * Renders the events catalog; filter state lives in the URL query so
  * results are linkable and survive reloads.
  * @param {HTMLElement} main
  * @param {URLSearchParams} query Parsed from the hash route.
  */
 export async function renderReleases(main, query) {
+  document.title = 'Events · Fanfares Index';
   const state = { q: query.get('q') || '', kind: query.get('kind') || '', sort: query.get('sort') || 'newest', period: query.get('period') || '', offset: 0, items: [] };
   main.innerHTML = `
-    <div class="page-head"><div class="eyebrow">Catalog</div><h1>Releases</h1>
-      <p>Everything sold through Fanfares: podcasts, audiobooks, music and writing. Free previews play right here.</p></div>
-    <div class="toolbar">
-      <label class="search">${searchIcon}<input type="search" id="q" placeholder="Search titles, topics or creators" value="${esc(state.q)}" aria-label="Search releases"></label>
-      <select class="select" id="sort" aria-label="Sort">${SORTS.map(([v, l]) => `<option value="${v}"${v === state.sort ? ' selected' : ''}>${l}</option>`).join('')}</select>
-      ${periodSelect(state.period)}
-    </div>
-    <div class="filters">
-      <div class="chips" role="group" aria-label="Release type">
-        ${KINDS.map(([v, l]) => `<button class="chip" data-kind="${v}" aria-pressed="${v === state.kind}">${l}</button>`).join('')}
+    <div class="page-head"><div class="eyebrow">Events</div><h1>Everything published on Fanfares</h1>
+      <p>Podcasts, audiobooks, music, articles and notes. Each one is a signed Nostr event, with every sale it made on the record.</p></div>
+    <div class="ev-controls">
+      <div class="toolbar">
+        <label class="search">${searchIcon}<input type="search" id="q" placeholder="Filter by title, topic or creator" value="${esc(state.q)}" aria-label="Filter events"></label>
+        <div id="sort"></div>
+        <div id="period"></div>
       </div>
-      <div class="result-count" id="count" aria-live="polite"></div>
+      <div class="kind-tiles" id="tiles">${Array.from({ length: 5 }, () => '<div class="kind-tile"><div class="skeleton" style="height:52px"></div></div>').join('')}</div>
     </div>
+    <div class="result-count" id="count" aria-live="polite"></div>
     <div id="results">${gridSkeleton(12)}</div>
     <div class="load-more"><button class="btn" id="more" hidden>Load more</button></div>`;
 
@@ -51,35 +68,52 @@ export async function renderReleases(main, query) {
     if (state.kind) p.set('kind', state.kind);
     if (state.sort !== 'newest') p.set('sort', state.sort);
     if (state.period) p.set('period', state.period);
-    history.replaceState(null, '', `#/releases${p.size ? `?${p}` : ''}`);
+    history.replaceState(null, '', `#/events${p.size ? `?${p}` : ''}`);
   };
 
   let seq = 0;
   const load = async (append) => {
     const mine = ++seq;
-    if (!append) { state.offset = 0; state.items = []; results.innerHTML = gridSkeleton(12); }
+    if (!append) { state.offset = 0; state.items = []; results.classList.add('loading'); }
     const res = await get('/api/releases', { q: state.q, kind: state.kind, sort: state.sort, period: state.period, limit: PAGE, offset: state.offset });
     if (mine !== seq) return;
+    results.classList.remove('loading');
     state.items.push(...res.items);
     state.offset += res.items.length;
     registerTracks(state.items);
-    results.innerHTML = releaseGrid(state.items, state.q ? `Nothing matches “${state.q}”.` : 'No releases of this type yet.');
-    count.textContent = `${num(res.total)} release${res.total === 1 ? '' : 's'}`;
+    const what = state.kind ? kindPlural(Number(state.kind)).toLowerCase() : 'events';
+    results.innerHTML = releaseGrid(state.items, state.q ? `Nothing matches “${state.q}”.` : `No ${what} in this period.`);
+    const period = PERIODS_SHORT.find(([v]) => v === state.period);
+    count.innerHTML = `<b>${num(res.total)}</b> ${res.total === 1 ? what.replace(/s$/, '') : what}${state.period ? ` · ${state.sort === 'sales' || state.sort === 'earned' ? 'selling' : 'published'} in the last ${esc(period[1])}` : ''}`;
     more.hidden = state.offset >= res.total;
   };
+
+  const tilesHost = main.querySelector('#tiles');
+  const paintTiles = (t) => {
+    const all = { name: 'All events', kind: '', count: t.total, sats: t.earned };
+    const max = Math.max(...t.tiles.map((x) => x.count), 1);
+    tilesHost.innerHTML = [all, ...t.tiles].map((x) => `
+      <button class="kind-tile" data-kind="${x.kind}" aria-pressed="${String(x.kind) === state.kind}">
+        <span class="kt-name">${esc(x.name)}</span>
+        <span class="kt-count">${num(x.count)}</span>
+        <span class="kt-sub">${x.sats != null ? `${satsShort(x.sats)} earned` : '&nbsp;'}</span>
+        ${x.kind ? `<span class="kt-bar"><i style="width:${Math.max(4, (x.count / max) * 100)}%"></i></span>` : '<span class="kt-bar all"><i style="width:100%"></i></span>'}
+      </button>`).join('');
+    tilesHost.querySelectorAll('[data-kind]').forEach((b) => b.addEventListener('click', () => {
+      state.kind = b.dataset.kind;
+      tilesHost.querySelectorAll('[data-kind]').forEach((c) => c.setAttribute('aria-pressed', String(c === b)));
+      syncUrl(); load(false);
+    }));
+  };
+  formatTiles().then(paintTiles).catch(() => { tilesHost.remove(); });
 
   let debounce;
   main.querySelector('#q').addEventListener('input', (e) => {
     clearTimeout(debounce);
-    debounce = setTimeout(() => { state.q = e.target.value.trim(); syncUrl(); load(false); }, 250);
+    debounce = setTimeout(() => { state.q = e.target.value.trim(); syncUrl(); load(false); }, 200);
   });
-  main.querySelector('#sort').addEventListener('change', (e) => { state.sort = e.target.value; syncUrl(); load(false); });
-  main.querySelector('#period').addEventListener('change', (e) => { state.period = e.target.value; syncUrl(); load(false); });
-  main.querySelectorAll('[data-kind]').forEach((chip) => chip.addEventListener('click', () => {
-    state.kind = chip.dataset.kind;
-    main.querySelectorAll('[data-kind]').forEach((c) => c.setAttribute('aria-pressed', String(c === chip)));
-    syncUrl(); load(false);
-  }));
+  segmented(main.querySelector('#sort'), SORTS, state.sort, (v) => { state.sort = v; syncUrl(); load(false); }, 'Sort');
+  segmented(main.querySelector('#period'), PERIODS_SHORT, state.period, (v) => { state.period = v; syncUrl(); load(false); }, 'Period');
   more.addEventListener('click', async () => { more.disabled = true; await load(true); more.disabled = false; });
   await load(false);
 }
@@ -89,7 +123,7 @@ const who = (p, size = 26, phoneNote = '') => `<a class="who" href="${personHref
   ? `<small class="who-sub show-sm">${esc(phoneNote)}</small>` : ''}</span></a>`;
 
 /**
- * Renders one release.
+ * Renders one published event.
  * @param {HTMLElement} main
  * @param {string} address `kind:pubkey:d` (or event id) from the route.
  */
@@ -97,7 +131,7 @@ export async function renderRelease(main, address) {
   main.innerHTML = '<div class="detail"><div class="skeleton" style="aspect-ratio:1"></div><div><div class="skeleton" style="height:60px"></div></div></div>';
   let r;
   try { r = await get(`/api/releases/${encodeURIComponent(address)}`); } catch (err) {
-    main.innerHTML = `<div class="empty">${err.status === 404 ? 'This release is not in the archive.' : esc(err.message)}</div>`;
+    main.innerHTML = `<div class="empty">${err.status === 404 ? 'This event is not in the archive.' : esc(err.message)}</div>`;
     return;
   }
   registerTracks([r]);
@@ -109,17 +143,17 @@ export async function renderRelease(main, address) {
     r.durationSec ? duration(r.durationSec) : '',
     r.parts > 1 ? `${r.parts} parts` : '',
     r.revisions > 1 ? `${r.revisions} revisions` : '',
-    r.isTest ? 'Test release' : ''
+    r.isTest ? 'Test event' : ''
   ].filter(Boolean);
 
   main.innerHTML = `
-    <a class="back" href="#/releases">← Releases</a>
+    <a class="back" href="#/events">← Events</a>
     <div class="detail">
       <div>
         <div class="detail-cover">${cover(r, { eager: true, large: true })}</div>
       </div>
       <div>
-        <div class="eyebrow">${esc(r.kindLabel)}${r.topics.length ? ` · ${r.topics.slice(0, 3).map(esc).join(' · ')}` : ''}</div>
+        <div class="eyebrow">${esc(kindName(r.kind, r.kindLabel))}${r.topics.length ? ` · ${r.topics.slice(0, 3).map(esc).join(' · ')}` : ''}</div>
         <h1>${esc(r.title)}</h1>
         <a class="author-chip" href="${personHref(r.author.pubkey)}">${avatar(r.author, 26)}${esc(displayName(r.author))}</a>
         <div class="meta-line">${meta.map((m) => `<span>${esc(m)}</span>`).join('')}</div>
@@ -132,7 +166,7 @@ export async function renderRelease(main, address) {
         ${r.summary ? `<p class="summary">${esc(r.summary)}</p>` : ''}
         <div class="mini-stats">
           <div><b>${num(r.stats.sales)}</b><span>purchases</span></div>
-          <div><b class="sats">${num(r.stats.earnedSats)}</b><span>earned</span></div>
+          <div><b>${satsShort(r.stats.earnedSats)}</b><span>earned</span></div>
           <div><b>${num(r.stats.zaps)}</b><span>payments</span></div>
           <div><b>${num(r.stats.comments + r.stats.reactions + r.stats.reposts)}</b><span>reactions</span></div>
         </div>
@@ -166,7 +200,7 @@ export async function renderRelease(main, address) {
       ${r.payments.map((p) => `<tr><td>${who(p.sender)}</td><td class="hide-sm">${who(p.recipient)}</td>
         <td class="hide-sm"><span class="badge ${p.rail}">${p.rail === 'cashu' ? 'Cashu' : 'Lightning'}</span></td>
         <td class="r nowrap">${sats(p.sats)}</td>${whenCell(p.at)}</tr>`).join('')}
-      </tbody></table></div>` : '<div class="empty">No payments recorded for this release.</div>'),
+      </tbody></table></div>` : '<div class="empty">No payments recorded for this event.</div>'),
     comments: () => (r.comments.length ? `<div>${r.comments.map((c) => `<div class="comment">${avatar(c.author, 34)}
       <div><a href="${personHref(c.author.pubkey)}"><b>${esc(displayName(c.author))}</b></a> <span class="muted" style="font-size:12.5px">${ago(c.at)}</span>
       <p>${esc(c.text)}</p></div></div>`).join('')}</div>` : '<div class="empty">No comments yet.</div>'),

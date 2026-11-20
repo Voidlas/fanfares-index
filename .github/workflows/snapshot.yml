@@ -9,6 +9,7 @@
 # Setup (see README "Static snapshot"):
 #   secret  CLOUDFLARE_API_TOKEN  token with "Workers Scripts: Edit" on the personal account
 #   var     SNAPSHOT_URL          public URL of the deployed site, e.g. https://fanfares-index-static.<sub>.workers.dev
+#                                 or the GitHub Pages URL, e.g. https://<user>.github.io/fanfares-index
 #   secrets GCP_PROJECT, GCP_BUCKET, GCP_SERVICE_ACCOUNT, GCP_WORKLOAD_IDENTITY_PROVIDER
 #           (optional) back up the archive to Cloud Storage and refresh BigQuery
 # Without the token the run still crawls and builds, and skips the deploy.
@@ -28,7 +29,7 @@ on:
         default: false
 
 permissions:
-  contents: read
+  contents: write # publish the built site to the `pages` branch (GitHub Pages)
   actions: write # prune old archive caches
   id-token: write # keyless sign-in to Google Cloud (Workload Identity Federation)
 
@@ -97,6 +98,21 @@ jobs:
 
       - name: Check static API against the dynamic one
         run: node --no-warnings snapshot/parity.mjs
+
+      # GitHub Pages: Settings > Pages > Deploy from a branch > `pages` / (root).
+      # The branch is rewritten as a single commit each run so it stays small.
+      - name: Publish to the pages branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          touch dist/.nojekyll
+          cd dist
+          git init -q -b pages
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Snapshot $(date -u +%FT%TZ)"
+          git push -f -q "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" pages
 
       - name: Deploy to Cloudflare
         if: env.CLOUDFLARE_API_TOKEN != ''

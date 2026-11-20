@@ -26,7 +26,7 @@ export function initPlayer() {
     el.hidden = false;
     el.querySelector('.player-title').textContent = r.title;
     const img = el.querySelector('.player-cover');
-    img.src = safeUrl(r.cover) || '/img/logo.png';
+    img.src = safeUrl(r.cover) || 'img/logo.png';
     audio.src = r.previewUrl;
     audio.play().catch(() => { /* autoplay blocked: controls remain */ });
   });
