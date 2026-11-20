@@ -116,17 +116,21 @@ jobs:
       - name: Back up the archive to Cloud Storage
         if: env.GCP_PROJECT != ''
         run: |
-          node --no-warnings -e "new (require('node:sqlite').DatabaseSync)('data/fanfares.sqlite').exec(\"VACUUM INTO 'fanfares.sqlite'\")"
-          gzip -9 fanfares.sqlite
-          gcloud storage cp fanfares.sqlite.gz "gs://$GCP_BUCKET/latest/fanfares.sqlite.gz"
+          copy="$RUNNER_TEMP/fanfares.sqlite"
+          rm -f "$copy" "$copy.gz"
+          node --no-warnings -e "new (require('node:sqlite').DatabaseSync)('data/fanfares.sqlite').exec(\"VACUUM INTO '$copy'\")"
+          gzip -9 "$copy"
+          gcloud storage cp "$copy.gz" "gs://$GCP_BUCKET/latest/fanfares.sqlite.gz"
           # One copy per UTC day (the bucket deletes them after 35 days).
-          gcloud storage cp --no-clobber fanfares.sqlite.gz "gs://$GCP_BUCKET/daily/$(date -u +%F).sqlite.gz"
+          gcloud storage cp --no-clobber "$copy.gz" "gs://$GCP_BUCKET/daily/$(date -u +%F).sqlite.gz"
 
       - name: Refresh BigQuery
         if: env.GCP_PROJECT != ''
         run: |
           node --no-warnings snapshot/export-bq.mjs
           snapshot/load-bq.sh "$GCP_PROJECT" fanfares bq
+          # Views, once-a-day snapshots and replaceable-event history (~40 MB scanned per run).
+          bq query --project_id="$GCP_PROJECT" --location=US --use_legacy_sql=false --format=none < snapshot/bigquery.sql
 
       - name: Prune old archive caches
         if: always() && steps.sync.outcome == 'success'

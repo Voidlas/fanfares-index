@@ -5,3 +5,6 @@ backup/
 dist/
 .wrangler/
 bq/
+*.sqlite
+*.sqlite.gz
+*.sqlite-*

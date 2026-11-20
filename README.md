@@ -131,6 +131,12 @@ When the `GCP_*` secrets are set, every run also:
   every archive table, signed JSON as JSON columns, and a TIMESTAMP twin `<column>_ts` for each
   unix-time column.
 
+- runs `snapshot/bigquery.sql`, the versioned BigQuery model: the views `sales`, `monthly_sales`,
+  `creators`, `release_stats` and `totals`; once per UTC day, snapshots into `daily_totals`,
+  `daily_creator_stats` (with rank) and `daily_release_stats`; and `event_history`, every version
+  of every profile, follow list, relay list and wallet seen (the archive keeps only the newest).
+  History accumulates from 2026-11-20 on and cannot be backfilled.
+
 GitHub signs in with Workload Identity Federation (no stored key): the pool `github` trusts only
 this repository, and the service account `fanfares-ci` can write just the `fanfares` dataset, run
 load jobs, and write the archive bucket. Secrets: `GCP_PROJECT`, `GCP_BUCKET`,
