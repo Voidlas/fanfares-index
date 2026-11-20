@@ -35,7 +35,8 @@ function creatorCard(c, rank) {
     <div class="cr-head">${rank ? `<span class="cr-rank">${rank}</span>` : ''}${avatar(c, 44)}
       <div class="cr-id"><div class="name">${esc(displayName(c))}</div><div class="handle">${handle(c)}</div></div>
     </div>
-    <div class="cr-earned"><b class="btc-num">${satsShort(c.earnedSats)}</b><span>sats in zaps</span></div>
+    ${c.earnedSats ? `<div class="cr-earned"><b class="btc-num">${satsShort(c.earnedSats)}</b><span>sats from supporters</span></div>`
+      : `<div class="cr-earned"><b>${num(c.releases)}</b><span>${c.releases === 1 ? 'event' : 'events'} published</span></div>`}
     <dl class="cr-metrics">
       <div><dt>Sales</dt><dd>${compact(c.sales)}</dd></div>
       <div><dt>Supporters</dt><dd>${compact(c.buyers)}</dd></div>
@@ -59,7 +60,7 @@ export async function renderCreators(main, query) {
   const state = { sort: CREATOR_SORTS.some(([k]) => k === query.get('sort')) ? query.get('sort') : '', period: query.get('period') || '', shown: PAGE };
   main.innerHTML = `
     <div class="page-head"><div class="eyebrow">Creators</div><h1>Top creators on Fanfares</h1>
-      <p>Ranked by the zaps their audiences paid them, straight into their own wallets.</p></div>
+      <p>Ranked by what their audiences paid them, straight into their own wallets.</p></div>
     <div class="toolbar split"><div id="sort"></div><div id="period"></div></div>
     ${summary([['c-total', 'Creators earning'], ['c-sats', 'Zapped to creators'], ['c-avg', 'Per creator'], ['c-sales', 'Sales']])}
     <div class="section-head list-head"><h2>Ranking</h2><span class="muted" id="count" aria-live="polite"></span></div>
@@ -73,7 +74,7 @@ export async function renderCreators(main, query) {
 
   const paint = () => {
     grid.innerHTML = ranked.length ? ranked.slice(0, state.shown).map((c, i) => creatorCard(c, i + 1)).join('')
-      : '<div class="empty">No creators in this period yet.</div>';
+      : '<div class="empty">No creator sales in this period yet. Try a longer time frame.</div>';
     $('#count').textContent = `${num(ranked.length)} creator${ranked.length === 1 ? '' : 's'}`;
     more.hidden = state.shown >= ranked.length;
   };
@@ -208,7 +209,7 @@ export async function renderSupporters(main, query) {
         <span class="r hide-sm">${satsShort(s.purchases ? s.spentSats / s.purchases : 0)}</span>
         <span class="r sp-spent">${satsShort(s.spentSats)}<small class="show-sm">${plural(s.purchases, 'purchase')} · ${plural(s.creators, 'creator')}</small></span>
         <span class="r muted hide-sm" title="${s.latest ? new Date(s.latest * 1000).toLocaleString('en-US') : ''}">${agoShort(s.latest)}</span>
-      </a>`).join('')}` : '<div class="empty">No purchases in this period yet.</div>';
+      </a>`).join('')}` : '<div class="empty">No purchases in this period yet. Try a longer time frame.</div>';
     $('#count').textContent = total ? `${num(rows.length)} supporters · ${num(total)} sats` : '';
     more.hidden = shown >= rows.length;
   };

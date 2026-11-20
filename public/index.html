@@ -37,6 +37,7 @@
         <a href="#/live" data-nav="live"><svg class="nav-icon" width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="2"/><path d="M5.6 5.6a6.2 6.2 0 0 0 0 8.8M14.4 5.6a6.2 6.2 0 0 1 0 8.8"/></svg><span>Live</span></a>
         <a href="#/api" data-nav="api" class="nav-desktop"><svg class="nav-icon" width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 6-4 4 4 4M13 6l4 4-4 4"/></svg><span>API</span></a>
       </nav>
+      <a class="top-api" href="#/api" data-nav="api" aria-label="API"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 6-4 4 4 4M13 6l4 4-4 4"/></svg></a>
       <a class="top-search" href="#/search" data-nav="search" aria-label="Search Fanfares">
         <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="5.2" stroke="currentColor" stroke-width="1.6" fill="none"/><path d="M11 11l3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
         <span class="top-search-text">Search Fanfares</span><kbd>/</kbd>
@@ -54,17 +55,19 @@
 
   <footer class="footer">
     <div class="footer-inner">
-      <div>
-        <strong>Fanfares Index</strong> is an open archive of public Nostr events published through
-        <a href="https://fanfares.io" target="_blank" rel="noopener">Fanfares</a>. Every number here is computed
-        from signed events anyone can fetch from relays.
+      <div class="foot-brand">
+        <a class="brand" href="#/" aria-label="Fanfares Index home"><img src="img/logo-mark.png" alt="" width="24" height="24"><span class="brand-name">Fanfares<em>Index</em></span></a>
+        <p>An open record of the work published on <a href="https://fanfares.io" target="_blank" rel="noopener">Fanfares</a> and the people who pay for it.
+          Every number comes from signed Nostr events that anyone can verify.</p>
       </div>
-      <div class="footer-links">
-        <a href="#/api">API</a>
-        <a href="#/live">Sync status</a>
-        <button class="install-btn" id="install" hidden>Install app</button>
-        <label class="toggle"><input type="checkbox" id="show-test"> Include test events</label>
-      </div>
+      <nav class="foot-links" aria-label="Footer">
+        <div><h4>Explore</h4><a href="#/events">Events</a><a href="#/creators">Creators</a><a href="#/supporters">Supporters</a><a href="#/insights">Insights</a></div>
+        <div><h4>Data</h4><a href="#/api">API</a><a href="#/live">Live activity</a><a href="#/search">Search</a><a href="https://fanfares.io" target="_blank" rel="noopener">Fanfares ↗</a></div>
+      </nav>
+    </div>
+    <div class="footer-bar">
+      <label class="switch"><input type="checkbox" id="show-test"><span class="switch-ui" aria-hidden="true"></span>Include test events</label>
+      <button class="install-btn" id="install" hidden>Install app</button>
     </div>
   </footer>
 

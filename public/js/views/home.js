@@ -44,14 +44,14 @@ export async function renderHome(main) {
     <section class="home-hero">
       <div class="hero">
         <h1>Everything that happens <span class="accent">on Fanfares.</span></h1>
-        <p class="lede">Every event, creator and sale on Fanfares, read straight from Nostr and open to everyone.</p>
+        <p class="lede">Every event, creator and sale on Fanfares, read from Nostr. Every sat here went straight to the people who made the work.</p>
         <div class="hero-actions">
           <a class="search-cta" href="#/search">${searchIcon}<span>Search events, creators, npubs…</span><kbd>/</kbd></a>
           <a class="btn ghost" href="#/insights">${chartIcon}<span>Insights</span></a>
         </div>
       </div>
       <div class="hero-card" id="headline">
-        <div class="hc-head"><span class="eyebrow">Paid to creators</span><div id="frame-a"></div></div>
+        <div class="hc-head"><span class="eyebrow">Paid directly to creators</span><div id="frame-a"></div></div>
         <div class="big"><span class="btc-num" id="hc-sats">—</span><small>sats</small></div>
         <div class="hc-sub" id="hc-sub">${skeleton(18)}</div>
         <div class="hero-facts" id="hc-facts">${skeleton(40)}</div>
@@ -72,7 +72,7 @@ export async function renderHome(main) {
     <section class="section" id="trend">
       <div class="section-head wrap"><h2>Month by month</h2><div id="trend-measure"></div></div>
       <div class="panel trend-panel"><div id="trend-chart">${skeleton(200)}</div>
-        <div class="trend-foot"><span>Every month on record, scaled so quiet months stay visible.</span><a class="more" href="#/insights">All insights →</a></div></div>
+        <div class="trend-foot"><span>Every month on record.</span><a class="more" href="#/insights">All insights →</a></div></div>
     </section>
 
     <section class="section" id="inside">

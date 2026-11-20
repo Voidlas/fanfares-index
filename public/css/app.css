@@ -1061,6 +1061,101 @@ a.rec-tile:hover { border-color: var(--line-strong); }
   #ins-window .seg button { flex: 1; }
 }
 
+/* =====================================================================
+   Calm pass: one neutral palette, money marked only by the small sats
+   glyph, softer selected states, more compact controls, a real footer.
+   ===================================================================== */
+:root { --amber: #d9a650; --btc: #d9a650; }
+.btc-num { color: var(--ink); }
+.brand img { box-shadow: none; }
+.seg-thumb { background: #2a2a2a; box-shadow: inset 0 0 0 1px #3a3a3a; height: 28px; }
+.seg button { height: 28px; font-size: 12.5px; padding: 0 11px; }
+.seg button[aria-checked="true"] { color: var(--ink); }
+.btn { height: 36px; padding: 0 16px; font-size: 13.5px; }
+.btn.sm { height: 30px; padding: 0 12px; font-size: 12.5px; }
+.menu-btn { height: 30px; font-size: 12.5px; background: var(--surface); }
+.menu-tick { color: var(--ink); }
+.chg.up { color: #8fd4a8; background: rgba(91, 208, 138, 0.08); }
+.chg.down, .kpi .hint.down { color: var(--ink-3); background: none; }
+.kpi .hint.up { color: #8fd4a8; }
+mark { background: rgba(255, 255, 255, 0.14); }
+
+/* home */
+.section { margin-top: 48px; }
+.home-hero .hero h1 { font-size: clamp(30px, 4vw, 48px); }
+.home-hero .hero p.lede { font-size: 15px; color: var(--ink-2); }
+.search-cta { height: 44px; border-radius: 12px; font-size: 14.5px; box-shadow: none; background: var(--surface); }
+.search-cta:hover { border-color: #444; box-shadow: none; }
+.btn.ghost { height: 44px; border-radius: 12px; padding: 0 14px; }
+.hero-card { border-color: var(--line); background: var(--surface); padding: 20px 22px; }
+.hero-card .big { font-size: clamp(36px, 4.4vw, 50px); }
+.trend-panel { padding: 16px 16px 12px; }
+.chart .bar { fill: #cfcfcf; }
+.insight-card .big-num { font-size: 26px; }
+.rec-tile b { font-size: 18px; }
+
+/* events, creators, supporters */
+.kind-tile[aria-pressed="true"] { border-color: #4a4a4a; background: var(--surface-2); }
+.cr-earned b { font-size: 26px; }
+.podium-card.p1 { border-color: var(--line-strong); background: linear-gradient(180deg, #121212, var(--surface)); }
+.podium-card.p1 .podium-rank { color: var(--ink-2); }
+.podium-figure { font-size: 26px; }
+.sum-cell .value { font-size: 24px; }
+
+/* search */
+.search-big { height: 50px; border-radius: 14px; box-shadow: none; }
+.search-big input { font-size: 16px; }
+.search-big:focus-within { border-color: #555; box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.05); }
+.search-big:focus-within > svg { color: var(--ink); }
+.search-bar { background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.75), transparent); }
+
+/* header: API shortcut for phones (desktop has it in the nav) */
+.top-api { display: none; place-items: center; width: 34px; height: 34px; border-radius: 9px; color: var(--ink-3); flex-shrink: 0; }
+.top-api.active, .top-api:hover { color: var(--ink); background: var(--surface); }
+
+/* footer */
+.main { padding-bottom: 64px; }
+.footer { background: #050505; }
+.footer-inner { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 32px; padding: 36px 24px 28px; }
+.footer-inner > div:first-child { max-width: 440px; }
+.foot-brand .brand { margin-bottom: 12px; }
+.foot-brand .brand img { width: 24px; height: 24px; border-radius: 7px; }
+.foot-brand .brand-name { font-size: 15px; }
+.foot-brand p { margin: 0; color: var(--ink-3); font-size: 13px; line-height: 1.6; }
+.foot-links { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+.foot-links h4 { margin: 0 0 8px; font-size: 12px; font-weight: 500; color: var(--ink-4); }
+.foot-links a { display: block; padding: 4px 0; font-size: 13.5px; color: var(--ink-2); }
+.footer-bar { max-width: var(--max); margin: 0 auto; padding: 14px 24px 22px; display: flex; justify-content: space-between; align-items: center; gap: 16px; border-top: 1px solid var(--line); font-size: 12.5px; }
+.switch { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; color: var(--ink-3); }
+.switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.switch-ui { position: relative; width: 30px; height: 18px; border-radius: 999px; background: #262626; box-shadow: inset 0 0 0 1px var(--line-strong); transition: background 0.2s; flex-shrink: 0; }
+.switch-ui::after { content: ''; position: absolute; top: 3px; left: 3px; width: 12px; height: 12px; border-radius: 50%; background: var(--ink-3); transition: transform 0.2s var(--ease), background 0.2s; }
+.switch input:checked + .switch-ui { background: #d9d9d9; }
+.switch input:checked + .switch-ui::after { transform: translateX(12px); background: #000; }
+.switch input:focus-visible + .switch-ui { outline: 1.5px solid var(--ink); outline-offset: 2px; }
+
+@media (max-width: 640px) {
+  .main { padding-top: 16px; }
+  .section { margin-top: 36px; }
+  .page-head h1 { font-size: 26px; }
+  .home-hero .hero h1 { font-size: 28px; }
+  .home-hero .hero p.lede { font-size: 14.5px; margin-bottom: 16px; }
+  .hero-card { padding: 16px; }
+  .hero-card .big { font-size: 38px; }
+  .seg button { height: 30px; }
+  .seg-thumb { height: 30px; }
+  .menu-btn { height: 32px; }
+  .search-big { height: 48px; }
+  .cr-earned b { font-size: 24px; }
+  .sum-cell .value { font-size: 19px; }
+  .podium-figure { font-size: 17px; }
+  .insight-card .big-num { font-size: 24px; }
+  .top-api { display: grid; }
+  .footer { margin-top: 8px; }
+  .footer-inner { grid-template-columns: minmax(0, 1fr); gap: 24px; padding: 28px 16px 20px; }
+  .footer-bar { padding: 14px 16px calc(84px + env(safe-area-inset-bottom)); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before { animation: none !important; transition: none !important; }
 }

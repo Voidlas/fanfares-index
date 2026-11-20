@@ -59,7 +59,7 @@ export const rankRow = ({ i, pic, href, title, sub, value, unit = '' }) => `<a c
   <div class="grow"><div class="title">${title}</div><div class="sub">${sub}</div></div>
   <div class="right"><span class="rv">${value}</span>${unit ? `<span class="ru">${unit}</span>` : ''}</div></a>`;
 
-const list = (items, render, n) => (items.length ? items.slice(0, n).map(render).join('') : '<div class="empty sm">Nothing yet in this period.</div>');
+const list = (items, render, n) => (items.length ? items.slice(0, n).map(render).join('') : '<div class="empty sm">A quiet stretch so far. Try a longer time frame.</div>');
 
 /** Small square artwork for event rows. */
 export const thumb = (r) => `<span class="thumb">${cover(r)}</span>`;
