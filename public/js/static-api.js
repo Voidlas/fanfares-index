@@ -159,6 +159,7 @@ export async function staticGet(path, params) {
   if ((m = path.match(/^\/api\/people\/([0-9a-f]{64})$/))) return person(m[1], params);
   if (path === '/api/supporters') return supporters(params);
   if (path === '/api/activity') return activity(params);
+  if (path === '/api/insights') return load(`insights${listParams(params).includeTest ? '.test' : ''}.json`);
   if (path === '/api/sync') return sync();
   throw Object.assign(new Error('unknown endpoint'), { status: 404 });
 }

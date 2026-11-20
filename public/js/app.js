@@ -7,6 +7,7 @@ import { initPlayer } from './player.js';
 import { initSyncStatus } from './sync-status.js';
 import { esc } from './ui.js';
 import { renderHome } from './views/home.js';
+import { renderInsights } from './views/insights.js';
 import { renderApi, renderLive } from './views/live.js';
 import { renderCreators, renderPerson, renderSupporters } from './views/people.js';
 import { renderRelease, renderReleases } from './views/releases.js';
@@ -20,6 +21,7 @@ const ROUTES = [
   [/^\/creators$/, 'creators', (m, q) => renderCreators(main, q)],
   [/^\/p\/([0-9a-f]{64})$/, 'creators', (m) => renderPerson(main, m[1])],
   [/^\/supporters$/, 'supporters', (m, q) => renderSupporters(main, q)],
+  [/^\/insights$/, 'insights', () => renderInsights(main)],
   [/^\/live$/, 'live', () => renderLive(main)],
   [/^\/api$/, 'api', () => renderApi(main)]
 ];

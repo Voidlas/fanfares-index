@@ -14,6 +14,7 @@
  *   meta.json                        build time, last crawl, sync history, event counts
  *   overview.json, overview.test.json
  *   activity.json, activity.test.json            newest 100 items
+ *   insights.json, insights.test.json            trends and breakdowns (snapshot/insights.mjs)
  *   releases/{all,today,week,month,year}.json    every listed release, stats in that window
  *   release/{key}.json               one release; key = first 32 hex of sha256(address)
  *   release/ids.json                 revision event id -> key
@@ -30,6 +31,7 @@ import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { buildModel } from '../worker/src/model.js';
 import * as Q from '../worker/src/queries.js';
+import { insights } from './insights.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const { values: args } = parseArgs({
@@ -87,6 +89,9 @@ for (const includeTest of [false, true]) {
   put(`overview${suffix(includeTest)}.json`, Q.overview(model, { includeTest }));
   put(`activity${suffix(includeTest)}.json`, Q.activity(model, { limit: ACTIVITY_ITEMS, includeTest }));
 }
+
+// Insights page: trends and breakdowns, with and without test releases.
+for (const includeTest of [false, true]) put(`insights${suffix(includeTest)}.json`, insights(model, { includeTest, now: builtAt }));
 
 // Release listings: every listed release (test ones flagged isTest), with
 // stats for the window. `_s` is the search haystack and `_e` the window's

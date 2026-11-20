@@ -138,6 +138,7 @@ button, input, select { font: inherit; color: inherit; }
 .panel .panel-sub { color: var(--ink-3); font-size: 13px; margin-bottom: 20px; }
 .grid-2 { display: grid; grid-template-columns: 1.65fr 1fr; gap: 16px; }
 .grid-2.even { grid-template-columns: 1fr 1fr; gap: 48px; }
+.grid-2 > *, .ins-grid > * { min-width: 0; }
 
 /* ---------- release cards ---------- */
 .release-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(196px, 1fr)); gap: 32px 20px; }
@@ -295,6 +296,12 @@ details.raw pre { margin: 12px 0 0; max-height: 440px; overflow: auto; padding: 
 .tabs button[aria-selected="true"] { color: var(--ink); box-shadow: inset 0 -1px 0 var(--ink); }
 .tabs .count { color: var(--ink-4); margin-left: 6px; font-variant-numeric: tabular-nums; }
 
+/* ---------- insights ---------- */
+.ins-stats { margin-top: 0; }
+.ins-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.ins-note { margin: 14px 0 0; font-size: 12.5px; color: var(--ink-3); }
+#ins-prices th, #ins-prices td { padding-right: 8px; }
+
 /* ---------- tables ---------- */
 .table-wrap { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
@@ -373,6 +380,7 @@ code { font: 12px var(--mono); background: var(--surface-2); border: 1px solid v
   .stat:nth-child(4) { padding-left: 0; border-left: 0; }
   .stat:nth-child(n+4) { border-top: 1px solid var(--line); }
   .grid-2, .grid-2.even { grid-template-columns: 1fr; gap: 56px; }
+  .ins-grid { grid-template-columns: 1fr; }
   .live-grid { gap: 16px; }
   .live-grid > :last-child { order: -1; }
   .detail { grid-template-columns: 1fr; gap: 32px; }

@@ -86,10 +86,11 @@ function shortNum(n) {
  * Horizontal bars for a small categorical breakdown (one hue: it encodes
  * magnitude, the label carries identity).
  * @param {{label: string, count: number}[]} rows
+ * @param {{format?: (n: number) => string}} [opts] Formats the value shown at the end of each bar.
  */
-export function hbars(rows) {
+export function hbars(rows, { format = num } = {}) {
   const max = Math.max(1, ...rows.map((r) => r.count));
   return rows.map((r) => `<div class="hbar"><span>${esc(r.label)}</span>
     <div class="track"><div class="fill" style="width:${(r.count / max) * 100}%"></div></div>
-    <span class="n">${num(r.count)}</span></div>`).join('');
+    <span class="n">${esc(format(r.count))}</span></div>`).join('');
 }
