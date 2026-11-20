@@ -12,7 +12,8 @@
     "sync:full": "node --no-warnings sync.js --full",
     "snapshot": "node --no-warnings snapshot/build.mjs",
     "snapshot:parity": "node --no-warnings snapshot/parity.mjs",
-    "snapshot:seed": "node --no-warnings snapshot/seed.mjs"
+    "snapshot:seed": "node --no-warnings snapshot/seed.mjs",
+    "snapshot:bq": "node --no-warnings snapshot/export-bq.mjs"
   },
   "keywords": ["nostr", "fanfares", "bitcoin", "lightning", "cashu", "zaps"],
   "license": "MIT"

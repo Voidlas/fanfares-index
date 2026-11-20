@@ -120,3 +120,21 @@ Actions minutes: a run takes about a minute, so hourly runs fit even a private
 repository's 2,000 free minutes. Public repositories have unlimited minutes.
 
 API reference: open `/#/api` in the running app.
+
+## Google Cloud (optional)
+
+When the `GCP_*` secrets are set, every run also:
+
+- backs up the archive to Cloud Storage: `latest/fanfares.sqlite.gz`, plus one copy per day under
+  `daily/` (deleted after 35 days);
+- refreshes the BigQuery dataset `fanfares` (`snapshot/export-bq.mjs` + `snapshot/load-bq.sh`):
+  every archive table, signed JSON as JSON columns, and a TIMESTAMP twin `<column>_ts` for each
+  unix-time column.
+
+GitHub signs in with Workload Identity Federation (no stored key): the pool `github` trusts only
+this repository, and the service account `fanfares-ci` can write just the `fanfares` dataset, run
+load jobs, and write the archive bucket. Secrets: `GCP_PROJECT`, `GCP_BUCKET`,
+`GCP_SERVICE_ACCOUNT`, `GCP_WORKLOAD_IDENTITY_PROVIDER`.
+
+Get a copy of the database: `gcloud storage cp gs://<bucket>/latest/fanfares.sqlite.gz .`
+(or rebuild one from the public site with `snapshot/seed.mjs`).

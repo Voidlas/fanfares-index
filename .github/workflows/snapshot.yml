@@ -9,6 +9,8 @@
 # Setup (see README "Static snapshot"):
 #   secret  CLOUDFLARE_API_TOKEN  token with "Workers Scripts: Edit" on the personal account
 #   var     SNAPSHOT_URL          public URL of the deployed site, e.g. https://fanfares-index-static.<sub>.workers.dev
+#   secrets GCP_PROJECT, GCP_BUCKET, GCP_SERVICE_ACCOUNT, GCP_WORKLOAD_IDENTITY_PROVIDER
+#           (optional) back up the archive to Cloud Storage and refresh BigQuery
 # Without the token the run still crawls and builds, and skips the deploy.
 name: Snapshot
 
@@ -28,6 +30,7 @@ on:
 permissions:
   contents: read
   actions: write # prune old archive caches
+  id-token: write # keyless sign-in to Google Cloud (Workload Identity Federation)
 
 concurrency:
   group: snapshot
@@ -39,6 +42,9 @@ jobs:
     timeout-minutes: 25
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      # Google Cloud (optional): identifiers, kept as secrets so public logs mask them.
+      GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
+      GCP_BUCKET: ${{ secrets.GCP_BUCKET }}
       SNAPSHOT_URL: ${{ vars.SNAPSHOT_URL }}
       INTERVAL_MIN: '60'
     steps:
@@ -95,6 +101,32 @@ jobs:
       - name: Deploy to Cloudflare
         if: env.CLOUDFLARE_API_TOKEN != ''
         run: npx --yes wrangler@4.92.0 deploy --config snapshot/wrangler.jsonc
+
+      - name: Sign in to Google Cloud
+        if: env.GCP_PROJECT != ''
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud and bq
+        if: env.GCP_PROJECT != ''
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Back up the archive to Cloud Storage
+        if: env.GCP_PROJECT != ''
+        run: |
+          node --no-warnings -e "new (require('node:sqlite').DatabaseSync)('data/fanfares.sqlite').exec(\"VACUUM INTO 'fanfares.sqlite'\")"
+          gzip -9 fanfares.sqlite
+          gcloud storage cp fanfares.sqlite.gz "gs://$GCP_BUCKET/latest/fanfares.sqlite.gz"
+          # One copy per UTC day (the bucket deletes them after 35 days).
+          gcloud storage cp --no-clobber fanfares.sqlite.gz "gs://$GCP_BUCKET/daily/$(date -u +%F).sqlite.gz"
+
+      - name: Refresh BigQuery
+        if: env.GCP_PROJECT != ''
+        run: |
+          node --no-warnings snapshot/export-bq.mjs
+          snapshot/load-bq.sh "$GCP_PROJECT" fanfares bq
 
       - name: Prune old archive caches
         if: always() && steps.sync.outcome == 'success'
