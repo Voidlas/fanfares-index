@@ -1,6 +1,6 @@
 /**
- * Entry point: hash router, nav highlighting, the test-release toggle and
- * one-time setup of the player and sync status.
+ * Entry point: hash router, nav highlighting, the test-event toggle, the
+ * "/" search shortcut and one-time setup of the player and sync status.
  */
 import { includeTest, setIncludeTest } from './api.js';
 import { initPlayer } from './player.js';
@@ -10,14 +10,16 @@ import { renderHome } from './views/home.js';
 import { renderInsights } from './views/insights.js';
 import { renderApi, renderLive } from './views/live.js';
 import { renderCreators, renderPerson, renderSupporters } from './views/people.js';
-import { renderRelease, renderReleases } from './views/releases.js';
+import { renderRelease, renderReleases } from './views/events.js';
+import { renderSearch } from './views/search.js';
 
 const main = document.getElementById('main');
 
 const ROUTES = [
   [/^\/?$/, 'home', () => renderHome(main)],
-  [/^\/releases$/, 'releases', (m, q) => renderReleases(main, q)],
-  [/^\/release\/(.+)$/, 'releases', (m) => renderRelease(main, decodeURIComponent(m[1]))],
+  [/^\/search$/, 'search', (m, q) => renderSearch(main, q)],
+  [/^\/(events|releases)$/, 'events', (m, q) => renderReleases(main, q)],
+  [/^\/(?:event|release)\/(.+)$/, 'events', (m) => renderRelease(main, decodeURIComponent(m[1]))],
   [/^\/creators$/, 'creators', (m, q) => renderCreators(main, q)],
   [/^\/p\/([0-9a-f]{64})$/, 'creators', (m) => renderPerson(main, m[1])],
   [/^\/supporters$/, 'supporters', (m, q) => renderSupporters(main, q)],
@@ -46,7 +48,15 @@ const toggle = document.getElementById('show-test');
 toggle.checked = includeTest();
 toggle.addEventListener('change', () => { setIncludeTest(toggle.checked); route(); });
 
-// Release-list filter edits rewrite the hash with replaceState; only real
+// Press "/" anywhere (outside a field) to jump to search.
+document.addEventListener('keydown', (e) => {
+  if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey || /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName)) return;
+  e.preventDefault();
+  const field = document.getElementById('search-q');
+  if (field) field.focus(); else location.hash = '#/search';
+});
+
+// Event-list filter edits rewrite the hash with replaceState; only real
 // navigations fire hashchange, so filters don't re-render the page.
 window.addEventListener('hashchange', route);
 initPlayer();

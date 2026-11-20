@@ -1,23 +1,78 @@
 /**
- * Activity feed items (sales, new releases, comments), shared by the
- * overview and the Live page.
+ * The activity feed (sales, zaps, newly published events, comments,
+ * reactions), shared by the overview and the Live page. Snapshot activity
+ * and the real-time relay stream (live-relays.js) merge into one list.
  */
-import { ago, displayName, esc, personHref, releaseHref, sats } from '../ui.js';
+import { get } from '../api.js';
+import { fanfaresUrl } from '../nostr.js';
+import { subscribeLive, liveItems } from '../live-relays.js';
+import { agoShort, cover, displayName, esc, kindName, personHref, releaseHref, satsShort } from '../ui.js';
 
-const ICONS = { sale: '⚡', release: '✦', comment: '💬' };
+const VERB = { sale: 'bought', zap: 'zapped', release: 'published', comment: 'commented on', reaction: 'reacted to' };
+const ICON = {
+  sale: '<path d="M11.5 2.5 4.5 11h5l-1 6.5 7-8.5h-5z"/>',
+  zap: '<path d="M11.5 2.5 4.5 11h5l-1 6.5 7-8.5h-5z"/>',
+  release: '<path d="M10 4v12M4 10h12"/>',
+  comment: '<path d="M4 5h12v8H9l-4 3v-3H4z"/>',
+  reaction: '<path d="M10 16s-6-3.6-6-8a3.2 3.2 0 0 1 6-1.6A3.2 3.2 0 0 1 16 8c0 4.4-6 8-6 8z"/>'
+};
 
-/** Renders /api/activity rows as feed items. */
+/** Link to an event: its page here, or Fanfares for one newer than the snapshot. */
+const eventHref = (r) => (r.fresh ? fanfaresUrl(r.address) || '#/events' : releaseHref(r.address));
+
+/** One feed row. */
+export function feedItem(e) {
+  const r = e.release || {};
+  const kind = kindName(r.kind, r.kindLabel);
+  const ext = r.fresh ? ' target="_blank" rel="noopener"' : '';
+  const right = e.sats && e.type !== 'release' ? satsShort(e.sats) : e.type === 'reaction' ? `<span class="fi-emoji">${esc(e.text)}</span>` : '';
+  const sub = e.type === 'comment' && e.text ? `“${esc(e.text)}”` : `${esc(kind)}${e.rail === 'cashu' ? ' · ecash' : ''}${e.type === 'sale' && e.source === 'verified' ? ' · verified' : ''}`;
+  return `<div class="fi ${e.type}${e.live ? ' is-live' : ''}" data-id="${esc(e.id || '')}">
+    <a class="fi-thumb" href="${eventHref(r)}"${ext} tabindex="-1" aria-hidden="true">${cover({ ...r, kindLabel: kind }, {})}
+      <span class="fi-icon"><svg width="11" height="11" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">${ICON[e.type] || ICON.release}</svg></span></a>
+    <div class="fi-body">
+      <div class="fi-line"><a href="${personHref(e.actor.pubkey)}"><b>${esc(displayName(e.actor))}</b></a> ${VERB[e.type] || 'interacted with'}
+        <a href="${eventHref(r)}"${ext}><b>${esc(r.title || 'an event')}</b></a></div>
+      <div class="fi-sub">${sub}</div>
+    </div>
+    <div class="fi-right">${right}<span class="fi-when" title="${e.at ? new Date(e.at * 1000).toLocaleString('en-US') : ''}">${e.live && Date.now() / 1000 - e.at < 60 ? 'now' : agoShort(e.at)}</span></div>
+  </div>`;
+}
+
+/**
+ * Renders a self-updating feed into `host`: the snapshot's latest activity
+ * with live relay items merged on top as they arrive.
+ * @param {HTMLElement} host
+ * @param {object} [opts]
+ * @param {number} [opts.limit] Rows shown.
+ * @param {(e: object) => boolean} [opts.filter] Which items to show.
+ * @param {(n: number) => void} [opts.onLive] Called with the live item count.
+ * @returns {Promise<{refilter: (f: (e: object) => boolean) => void}>}
+ */
+export async function liveFeed(host, { limit = 8, filter = () => true, onLive } = {}) {
+  const snapshot = await get('/api/activity', { limit: 100 });
+  let show = filter;
+  const paint = () => {
+    if (!host.isConnected) { stop(); return; }
+    const rows = [...liveItems(), ...snapshot].filter(show).sort((a, b) => b.at - a.at).slice(0, limit);
+    const before = new Set([...host.querySelectorAll('[data-id]')].map((x) => x.dataset.id));
+    host.innerHTML = rows.length ? rows.map(feedItem).join('') : '<div class="empty">Nothing here yet.</div>';
+    if (before.size) host.querySelectorAll('.fi.is-live').forEach((x) => { if (!before.has(x.dataset.id)) x.classList.add('enter'); });
+    onLive?.(liveItems().length);
+  };
+  let pending;
+  const stop = subscribeLive((m) => {
+    if (m.type === 'status') return;
+    clearTimeout(pending);
+    pending = setTimeout(paint, m.type === 'profile' ? 300 : 60);
+  });
+  paint();
+  // Keep relative times fresh.
+  const tick = setInterval(() => { if (!host.isConnected) { clearInterval(tick); stop(); } else paint(); }, 60000);
+  return { refilter: (f) => { show = f; paint(); } };
+}
+
+/** Static list of feed rows (no live updates). */
 export function feedItems(items) {
-  if (!items.length) return '<div class="empty">No activity yet.</div>';
-  return items.map((e) => {
-    const who = `<a href="${personHref(e.actor.pubkey)}"><b>${esc(displayName(e.actor))}</b></a>`;
-    const what = `<a href="${releaseHref(e.release.address)}"><b>${esc(e.release.title || 'a release')}</b></a>`;
-    const text = {
-      sale: `${who} bought ${what} for ${sats(e.sats)}${e.rail === 'cashu' ? ' in ecash' : ''}`,
-      release: `${who} published ${esc((e.release.kindLabel || 'a release').toLowerCase())} ${what}`,
-      comment: `${who} commented on ${what}`
-    }[e.type];
-    return `<div class="feed-item"><span class="feed-icon ${e.type}" aria-hidden="true">${ICONS[e.type]}</span>
-      <div class="txt">${text}</div><span class="when">${ago(e.at)}</span></div>`;
-  }).join('');
+  return items.length ? items.map(feedItem).join('') : '<div class="empty">No activity yet.</div>';
 }
