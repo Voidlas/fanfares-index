@@ -35,6 +35,8 @@ async function route() {
   const match = ROUTES.map(([re, nav, fn]) => [path.match(re), nav, fn]).find(([m]) => m);
   document.title = 'Fanfares Index';
   document.querySelectorAll('[data-nav]').forEach((a) => a.classList.toggle('active', a.dataset.nav === match?.[1]));
+  // Lets CSS adapt the chrome per page (the header search hides on the search page itself).
+  document.body.dataset.route = match?.[1] || '';
   window.scrollTo(0, 0);
   if (!match) { main.innerHTML = '<div class="empty">Page not found. <a href="#/">Go to the overview</a>.</div>'; return; }
   try {

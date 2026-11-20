@@ -2,25 +2,15 @@
  * Shared pieces for views built on /api/insights (the overview and the
  * Insights page): the rolling-window switch, "vs previous period" text and
  * the ranked lists of events, creators and supporters.
+ *
+ * Every page opens on all time; a picked window applies to that page only
+ * and is forgotten when the viewer navigates away.
  */
-import { avatar, displayName, esc, personHref, plural, releaseHref, satsShort, segmented } from './ui.js';
+import { avatar, cover, displayName, esc, num, personHref, plural, releaseHref, satsShort, segmented } from './ui.js';
 
 /** Rolling windows published by the snapshot (snapshot/insights.mjs), in display order. */
 export const WINDOWS = [['7d', '7 days'], ['30d', '30 days'], ['90d', '90 days'], ['365d', '12 months'], ['all', 'All time']];
-const DEFAULT = 'all';
-// v2: the default became all time; earlier saved picks are not carried over.
-const KEY = 'fanfares.insightPeriod.v2';
-const valid = (v) => WINDOWS.some(([k]) => k === v);
-
-/** The window this viewer picked last (a per-browser convenience), or all time. */
-export function savedWindow() {
-  try { const v = localStorage.getItem(KEY); return valid(v) ? v : DEFAULT; } catch { return DEFAULT; }
-}
-
-/** Remembers the picked window; silently skipped where storage is unavailable. */
-function saveWindow(v) {
-  try { localStorage.setItem(KEY, v); } catch { /* private mode */ }
-}
+export const DEFAULT_WINDOW = 'all';
 
 /** Ranking-page period closest to a window, for "View all" links ('' = all time). */
 export const listPeriod = (w) => ({ '7d': 'week', '30d': 'month', '365d': 'year' })[w] || '';
@@ -48,6 +38,9 @@ export function change(now, before, d) {
   return `${pct > 0 ? '↑' : '↓'} ${Math.abs(pct)}%`;
 }
 
+/** CSS modifier for a change string. */
+export const changeClass = (s) => (s.startsWith('↑') ? 'up' : s.startsWith('↓') ? 'down' : '');
+
 /**
  * Window switch; calls `onChange(window)` after the viewer picks one.
  * @param {HTMLElement} host Element to render the chips into.
@@ -55,25 +48,55 @@ export function change(now, before, d) {
  * @param {(w: string) => void} onChange
  */
 export function windowSwitch(host, current, onChange) {
-  segmented(host, WINDOWS.map(([k, l]) => [k, k === 'all' ? 'All' : k === '365d' ? '12m' : k]), current, (w) => { saveWindow(w); onChange(w); }, 'Time period');
+  segmented(host, WINDOWS.map(([k, l]) => [k, k === 'all' ? 'All' : k === '365d' ? '12m' : k]), current, onChange, 'Time period');
 }
 
-/** One ranked row; the arguments are already escaped HTML. */
-const row = (i, pic, href, title, sub, right) => `<a class="row" href="${href}"><span class="rank">${i + 1}</span>${pic}
-  <div class="grow"><div class="title">${title}</div><div class="sub">${sub}</div></div><div class="right">${right}</div></a>`;
-const list = (items, render, n) => (items.length ? items.slice(0, n).map(render).join('') : '<div class="empty">Nothing yet in this period.</div>');
+/**
+ * One ranked row; the arguments are already escaped HTML.
+ * `value` is the bold figure on the right, `unit` a small label under it.
+ */
+export const rankRow = ({ i, pic, href, title, sub, value, unit = '' }) => `<a class="row" href="${href}"><span class="rank">${i + 1}</span>${pic}
+  <div class="grow"><div class="title">${title}</div><div class="sub">${sub}</div></div>
+  <div class="right"><span class="rv">${value}</span>${unit ? `<span class="ru">${unit}</span>` : ''}</div></a>`;
 
-/** Top events of a window, by sats earned. */
-export const releaseRows = (items, n = 8) => list(items, (x, i) => row(i, avatar(x.author, 40), releaseHref(x.address), esc(x.title),
-  `${esc(displayName(x.author))} · ${plural(x.sales, 'sale')}`, satsShort(x.sats)), n);
+const list = (items, render, n) => (items.length ? items.slice(0, n).map(render).join('') : '<div class="empty sm">Nothing yet in this period.</div>');
 
-/** Top-earning creators of a window. */
-export const creatorRows = (items, n = 8) => list(items, (x, i) => row(i, avatar(x, 40), personHref(x.pubkey), esc(displayName(x)),
-  `${plural(x.sales, 'sale')} · ${plural(x.buyers, 'buyer')}`, satsShort(x.sats)), n);
+/** Small square artwork for event rows. */
+export const thumb = (r) => `<span class="thumb">${cover(r)}</span>`;
 
-/** Biggest supporters of a window. */
-export const buyerRows = (items, n = 8) => list(items, (x, i) => row(i, avatar(x, 40), personHref(x.pubkey), esc(displayName(x)),
-  `${plural(x.purchases, 'purchase')} · ${plural(x.creators, 'creator')}`, satsShort(x.sats)), n);
+/**
+ * Event rows. `by` is 'sats' (earned) or 'sales' (purchases); items carry
+ * either insights fields (sats, sales) or list fields (stats.earnedSats, stats.sales).
+ */
+export const releaseRows = (items, n = 8, by = 'sats') => list(items, (x, i) => {
+  const sales = x.stats?.sales ?? x.sales;
+  const earned = x.stats?.earnedSats ?? x.sats;
+  return rankRow({
+    i, pic: thumb(x), href: releaseHref(x.address), title: esc(x.title),
+    sub: by === 'sales' ? `${esc(displayName(x.author))} · ${satsShort(earned)}` : `${esc(displayName(x.author))} · ${plural(sales, 'sale')}`,
+    value: by === 'sales' ? num(sales) : satsShort(earned), unit: by === 'sales' ? (sales === 1 ? 'purchase' : 'purchases') : 'sats'
+  });
+}, n);
+
+/** Creator rows (insights `sats` or list `earnedSats`). */
+export const creatorRows = (items, n = 8, by = 'sats') => list(items, (x, i) => {
+  const earned = x.earnedSats ?? x.sats;
+  return rankRow({
+    i, pic: avatar(x, 40), href: personHref(x.pubkey), title: esc(displayName(x)),
+    sub: by === 'sales' ? `${satsShort(earned)} · ${plural(x.buyers, 'supporter')}` : `${plural(x.sales, 'sale')} · ${plural(x.buyers, 'supporter')}`,
+    value: by === 'sales' ? num(x.sales) : satsShort(earned), unit: by === 'sales' ? (x.sales === 1 ? 'sale' : 'sales') : 'sats'
+  });
+}, n);
+
+/** Supporter rows (insights `sats` or list `spentSats`). */
+export const buyerRows = (items, n = 8, by = 'sats') => list(items, (x, i) => {
+  const spent = x.spentSats ?? x.sats;
+  return rankRow({
+    i, pic: avatar(x, 40), href: personHref(x.pubkey), title: esc(displayName(x)),
+    sub: by === 'sales' ? `${satsShort(spent)} · ${plural(x.creators, 'creator')}` : `${plural(x.purchases, 'purchase')} · ${plural(x.creators, 'creator')}`,
+    value: by === 'sales' ? num(x.purchases) : satsShort(spent), unit: by === 'sales' ? (x.purchases === 1 ? 'purchase' : 'purchases') : 'sats'
+  });
+}, n);
 
 /** Whole-number percentage of a 0–1 share. */
 export const pct = (x) => `${Math.round((x || 0) * 100)}%`;

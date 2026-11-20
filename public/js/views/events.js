@@ -7,11 +7,11 @@ import { get, isStatic } from '../api.js';
 import { fanfaresUrl } from '../nostr.js';
 import {
   PERIODS_SHORT, ago, avatar, copy, cover, date, displayName, duration, esc, gridSkeleton, kindName, kindPlural, num, personHref,
-  releaseGrid, sats, satsShort, searchIcon, segmented, tween, whenCell
+  releaseGrid, sats, satsShort, segmented, whenCell
 } from '../ui.js';
 import { registerTracks } from '../player.js';
 
-const SORTS = [['newest', 'Newest'], ['sales', 'Best selling'], ['earned', 'Top earning'], ['price', 'Price']];
+const SORTS = [['newest', 'Newest'], ['sales', 'Best selling'], ['earned', 'Top zapped'], ['price', 'Price']];
 const PAGE = 24;
 
 /**
@@ -42,17 +42,13 @@ async function formatTiles() {
  */
 export async function renderReleases(main, query) {
   document.title = 'Events · Fanfares Index';
-  const state = { q: query.get('q') || '', kind: query.get('kind') || '', sort: query.get('sort') || 'newest', period: query.get('period') || '', offset: 0, items: [] };
+  const state = { kind: query.get('kind') || '', sort: query.get('sort') || 'newest', period: query.get('period') || '', offset: 0, items: [] };
   main.innerHTML = `
     <div class="page-head"><div class="eyebrow">Events</div><h1>Everything published on Fanfares</h1>
-      <p>Podcasts, audiobooks, music, articles and notes. Each one is a signed Nostr event, with every sale it made on the record.</p></div>
+      <p>Podcasts, audiobooks, music, articles and notes, each with every sale it made on the record.</p></div>
     <div class="ev-controls">
-      <div class="toolbar">
-        <label class="search">${searchIcon}<input type="search" id="q" placeholder="Filter by title, topic or creator" value="${esc(state.q)}" aria-label="Filter events"></label>
-        <div id="sort"></div>
-        <div id="period"></div>
-      </div>
-      <div class="kind-tiles" id="tiles">${Array.from({ length: 5 }, () => '<div class="kind-tile"><div class="skeleton" style="height:52px"></div></div>').join('')}</div>
+      <div class="kind-tiles" id="tiles">${Array.from({ length: 5 }, () => '<div class="kind-tile"><div class="skeleton" style="height:40px"></div></div>').join('')}</div>
+      <div class="toolbar split"><div id="sort"></div><div id="period"></div></div>
     </div>
     <div class="result-count" id="count" aria-live="polite"></div>
     <div id="results">${gridSkeleton(12)}</div>
@@ -64,7 +60,6 @@ export async function renderReleases(main, query) {
 
   const syncUrl = () => {
     const p = new URLSearchParams();
-    if (state.q) p.set('q', state.q);
     if (state.kind) p.set('kind', state.kind);
     if (state.sort !== 'newest') p.set('sort', state.sort);
     if (state.period) p.set('period', state.period);
@@ -75,14 +70,14 @@ export async function renderReleases(main, query) {
   const load = async (append) => {
     const mine = ++seq;
     if (!append) { state.offset = 0; state.items = []; results.classList.add('loading'); }
-    const res = await get('/api/releases', { q: state.q, kind: state.kind, sort: state.sort, period: state.period, limit: PAGE, offset: state.offset });
+    const res = await get('/api/releases', { kind: state.kind, sort: state.sort, period: state.period, limit: PAGE, offset: state.offset });
     if (mine !== seq) return;
     results.classList.remove('loading');
     state.items.push(...res.items);
     state.offset += res.items.length;
     registerTracks(state.items);
     const what = state.kind ? kindPlural(Number(state.kind)).toLowerCase() : 'events';
-    results.innerHTML = releaseGrid(state.items, state.q ? `Nothing matches “${state.q}”.` : `No ${what} in this period.`);
+    results.innerHTML = releaseGrid(state.items, `No ${what} in this period.`);
     const period = PERIODS_SHORT.find(([v]) => v === state.period);
     count.innerHTML = `<b>${num(res.total)}</b> ${res.total === 1 ? what.replace(/s$/, '') : what}${state.period ? ` · ${state.sort === 'sales' || state.sort === 'earned' ? 'selling' : 'published'} in the last ${esc(period[1])}` : ''}`;
     more.hidden = state.offset >= res.total;
@@ -90,28 +85,26 @@ export async function renderReleases(main, query) {
 
   const tilesHost = main.querySelector('#tiles');
   const paintTiles = (t) => {
-    const all = { name: 'All events', kind: '', count: t.total, sats: t.earned };
-    const max = Math.max(...t.tiles.map((x) => x.count), 1);
+    const all = { name: 'All', kind: '', count: t.total, sats: t.earned };
     tilesHost.innerHTML = [all, ...t.tiles].map((x) => `
       <button class="kind-tile" data-kind="${x.kind}" aria-pressed="${String(x.kind) === state.kind}">
         <span class="kt-name">${esc(x.name)}</span>
         <span class="kt-count">${num(x.count)}</span>
-        <span class="kt-sub">${x.sats != null ? `${satsShort(x.sats)} earned` : '&nbsp;'}</span>
-        ${x.kind ? `<span class="kt-bar"><i style="width:${Math.max(4, (x.count / max) * 100)}%"></i></span>` : '<span class="kt-bar all"><i style="width:100%"></i></span>'}
+        <span class="kt-sub">${x.sats != null ? `${satsShort(x.sats)} zapped` : '&nbsp;'}</span>
       </button>`).join('');
     tilesHost.querySelectorAll('[data-kind]').forEach((b) => b.addEventListener('click', () => {
       state.kind = b.dataset.kind;
       tilesHost.querySelectorAll('[data-kind]').forEach((c) => c.setAttribute('aria-pressed', String(c === b)));
+      tilesHost.scrollTo({ left: b.offsetLeft - (tilesHost.clientWidth - b.offsetWidth) / 2, behavior: 'smooth' });
       syncUrl(); load(false);
     }));
+    if (state.kind) {
+      const on = tilesHost.querySelector('[aria-pressed="true"]');
+      if (on) tilesHost.scrollLeft = on.offsetLeft - (tilesHost.clientWidth - on.offsetWidth) / 2;
+    }
   };
   formatTiles().then(paintTiles).catch(() => { tilesHost.remove(); });
 
-  let debounce;
-  main.querySelector('#q').addEventListener('input', (e) => {
-    clearTimeout(debounce);
-    debounce = setTimeout(() => { state.q = e.target.value.trim(); syncUrl(); load(false); }, 200);
-  });
   segmented(main.querySelector('#sort'), SORTS, state.sort, (v) => { state.sort = v; syncUrl(); load(false); }, 'Sort');
   segmented(main.querySelector('#period'), PERIODS_SHORT, state.period, (v) => { state.period = v; syncUrl(); load(false); }, 'Period');
   more.addEventListener('click', async () => { more.disabled = true; await load(true); more.disabled = false; });

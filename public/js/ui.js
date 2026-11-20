@@ -222,3 +222,59 @@ export function tween(el, to, format = num) {
 
 /** Search glyph shared by search fields. */
 export const searchIcon = '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="5.2" stroke="currentColor" stroke-width="1.6" fill="none"/><path d="M11 11l3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
+
+const chevron = '<svg class="menu-chev" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 3.5 5 6.5 8 3.5" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+/** Sliders glyph for "change how this page is scoped" buttons. */
+export const slidersIcon = '<svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2.5 4.5h6M12 4.5h1.5M2.5 11.5H4M7.5 11.5h6"/><circle cx="10.2" cy="4.5" r="1.7"/><circle cx="5.8" cy="11.5" r="1.7"/></svg>';
+
+let openMenu = null;
+document.addEventListener('click', (e) => { if (openMenu && !openMenu.contains(e.target)) openMenu.close(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && openMenu) openMenu.close(true); });
+window.addEventListener('hashchange', () => openMenu?.close());
+
+/**
+ * Compact button that opens a list of options: a dropdown on wide screens,
+ * a bottom sheet on phones. Used for the page-wide time frame.
+ * @param {HTMLElement} host
+ * @param {[string, string][]} options [value, label] pairs.
+ * @param {string} current
+ * @param {(value: string) => void} onChange
+ * @param {{label?: string, icon?: string, compact?: boolean}} [opts] `label` titles the sheet.
+ * @returns {{set: (value: string) => void}} Updates the shown value without calling onChange.
+ */
+export function menuButton(host, options, current, onChange, { label = 'Options', icon = slidersIcon, compact = false } = {}) {
+  const id = `menu-${Math.random().toString(36).slice(2, 8)}`;
+  host.innerHTML = `<div class="menu${compact ? ' compact' : ''}">
+    <button type="button" class="menu-btn" aria-haspopup="listbox" aria-expanded="false" aria-controls="${id}" aria-label="${esc(label)}">${icon}<span class="menu-val"></span>${chevron}</button>
+    <div class="menu-pop" id="${id}" hidden><div class="menu-sheet"><div class="menu-title">${esc(label)}</div><div role="listbox" aria-label="${esc(label)}">${options.map(([v, l]) =>
+      `<button type="button" role="option" data-v="${esc(v)}">${esc(l)}<svg class="menu-tick" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="m3 7.5 2.6 2.5L11 4.5" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button>`).join('')}</div></div></div>
+  </div>`;
+  const root = host.firstElementChild;
+  const btn = root.querySelector('.menu-btn');
+  const pop = root.querySelector('.menu-pop');
+  const set = (v) => {
+    root.querySelector('.menu-val').textContent = options.find(([k]) => k === v)?.[1] || '';
+    pop.querySelectorAll('[data-v]').forEach((o) => o.setAttribute('aria-selected', String(o.dataset.v === v)));
+  };
+  const close = (focus) => {
+    pop.hidden = true; btn.setAttribute('aria-expanded', 'false'); root.classList.remove('open');
+    if (openMenu === api) openMenu = null;
+    if (focus) btn.focus();
+  };
+  const api = { contains: (n) => root.contains(n), close };
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!pop.hidden) { close(); return; }
+    openMenu?.close();
+    pop.hidden = false; btn.setAttribute('aria-expanded', 'true'); root.classList.add('open');
+    openMenu = api;
+    pop.querySelector('[aria-selected="true"]')?.focus({ preventScroll: true });
+  });
+  pop.addEventListener('click', (e) => {
+    const o = e.target.closest('[data-v]');
+    if (!o) { if (e.target === pop) close(); return; }
+    set(o.dataset.v); close(true); onChange(o.dataset.v);
+  });
+  set(current);
+  return { set };
+}

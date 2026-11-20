@@ -2,34 +2,16 @@
  * People views: the creators directory, a person's profile (published
  * events, purchases, ecash mints) and the supporters leaderboard.
  */
-import { get } from '../api.js';
+import { every, get } from '../api.js';
 import { fanfaresProfileUrl, npub } from '../nostr.js';
 import {
   PERIODS_SHORT, agoShort, avatar, compact, copy, displayName, esc, num, personHref, plural, releaseGrid, safeUrl, satsShort,
-  searchIcon, segmented, tween
+  segmented, tween
 } from '../ui.js';
 import { registerTracks } from '../player.js';
 
 const PAGE = 24;
-const CREATOR_SORTS = [['', 'Top earner'], ['sales', 'Top seller'], ['releases', 'Most events'], ['newest', 'Recently active']];
-
-/** What the top three show for each sort: [figure HTML, context line HTML, include creator?]. */
-const PODIUM_BY_SORT = {
-  '': [(c) => `${satsShort(c.earnedSats)}<small>sats</small>`, (c) => `${plural(c.sales, 'sale')} · ${plural(c.buyers, 'supporter')}`, (c) => c.earnedSats > 0],
-  sales: [(c) => `${num(c.sales)}<small>${c.sales === 1 ? 'sale' : 'sales'}</small>`, (c) => `${satsShort(c.earnedSats)} sats · ${plural(c.buyers, 'supporter')}`, (c) => c.sales > 0],
-  releases: [(c) => `${num(c.releases)}<small>${c.releases === 1 ? 'event' : 'events'}</small>`, (c) => `${satsShort(c.earnedSats)} sats earned`, () => true],
-  newest: [(c) => `${agoShort(c.latestRelease)}<small>ago</small>`, (c) => `latest of ${plural(c.releases, 'event')}`, () => true]
-};
-
-/** Every row of a paged list endpoint (100 per request; the static API serves one file). */
-async function every(path, params) {
-  const out = [];
-  for (let offset = 0; ; offset += 100) {
-    const res = await get(path, { ...params, limit: 100, offset });
-    out.push(...res.items);
-    if (!res.items.length || out.length >= res.total) return out;
-  }
-}
+const CREATOR_SORTS = [['', 'Zaps'], ['sales', 'Sales'], ['releases', 'Events'], ['newest', 'Recent']];
 
 /** Short handle under a name: NIP-05 without the "_@", or a short npub. */
 const handle = (p) => esc(p.nip05 ? p.nip05.replace(/^_@/, '') : `${npub(p.pubkey).slice(0, 14)}…`);
@@ -46,49 +28,42 @@ const podium = (items, figure, line) => (items.length ? `<div class="podium">${i
     <div class="podium-figure">${figure(x)}</div><div class="podium-line">${line(x)}</div>
   </a>`).join('')}</div>` : '');
 
-/** Share of a total as a bar plus label. */
-const shareBar = (part, whole) => `<span class="share"><i style="width:${whole ? Math.max(2, (part / whole) * 100) : 0}%"></i></span>`;
-
-/** One creator in the directory. */
-function creatorCard(c, rank, total, q) {
-  const share = total ? Math.round((c.earnedSats / total) * 1000) / 10 : 0;
-  const active = c.latestRelease ? `published ${agoShort(c.latestRelease)} ago` : '';
+/** One creator in the ranking: who they are, the zaps they received, then the supporting figures. */
+function creatorCard(c, rank) {
+  const active = c.latestRelease ? `Last published ${agoShort(c.latestRelease)} ago` : '';
   return `<a class="cr-card" href="${personHref(c.pubkey)}">
-    <div class="cr-head">${avatar(c, 48)}
+    <div class="cr-head">${rank ? `<span class="cr-rank">${rank}</span>` : ''}${avatar(c, 44)}
       <div class="cr-id"><div class="name">${esc(displayName(c))}</div><div class="handle">${handle(c)}</div></div>
-      ${q ? '' : `<span class="cr-rank">#${rank}</span>`}
     </div>
-    <p class="about">${esc((c.about || '').replace(/https?:\/\/\S+/g, '').trim() || 'Publishing on Fanfares.')}</p>
-    <div class="cr-earned"><b>${satsShort(c.earnedSats)}</b><span>sats earned</span></div>
+    <div class="cr-earned"><b class="btc-num">${satsShort(c.earnedSats)}</b><span>sats in zaps</span></div>
     <dl class="cr-metrics">
       <div><dt>Sales</dt><dd>${compact(c.sales)}</dd></div>
       <div><dt>Supporters</dt><dd>${compact(c.buyers)}</dd></div>
       <div><dt>Events</dt><dd>${compact(c.releases)}</dd></div>
       <div><dt>Followers</dt><dd>${compact(c.followers)}</dd></div>
     </dl>
-    <div class="cr-foot">${shareBar(c.earnedSats, total)}<span>${c.earnedSats ? `${share >= 0.1 ? share : '<0.1'}% of sats` : 'No sales yet'}${active ? ` · ${active}` : ''}</span></div>
+    <p class="about">${esc((c.about || '').replace(/https?:\/\/\S+/g, '').trim() || 'Publishing on Fanfares.')}</p>
+    ${active ? `<div class="cr-foot">${active}</div>` : ''}
   </a>`;
 }
 
 /**
- * Creators directory: summary, podium, then every creator as a card.
+ * Top creators: summary, podium, then every creator as a card, ranked by
+ * zaps received (or sales, events, recent activity). Finding a specific
+ * creator is the main search's job.
  * @param {HTMLElement} main
- * @param {URLSearchParams} query `period` comes from the overview's "View all".
+ * @param {URLSearchParams} query `sort` and `period` come from the overview's "View all".
  */
 export async function renderCreators(main, query) {
   document.title = 'Creators · Fanfares Index';
-  const state = { q: '', sort: CREATOR_SORTS.some(([k]) => k === query.get('sort')) ? query.get('sort') : '', period: query.get('period') || '', shown: PAGE, items: [] };
+  const state = { sort: CREATOR_SORTS.some(([k]) => k === query.get('sort')) ? query.get('sort') : '', period: query.get('period') || '', shown: PAGE };
   main.innerHTML = `
-    <div class="page-head"><div class="eyebrow">Creators</div><h1>The people publishing on Fanfares</h1>
-      <p>Ranked by what their audiences paid them, straight into their own wallets. Every figure is read from public payment receipts.</p></div>
+    <div class="page-head"><div class="eyebrow">Creators</div><h1>Top creators on Fanfares</h1>
+      <p>Ranked by the zaps their audiences paid them, straight into their own wallets.</p></div>
     <div class="toolbar split"><div id="sort"></div><div id="period"></div></div>
-    ${summary([['c-total', 'Creators earning'], ['c-sats', 'Paid to creators'], ['c-avg', 'Per creator'], ['c-top', 'Top 10 share']])}
-    <div id="podium"></div>
-    <div class="toolbar list-tools">
-      <label class="search">${searchIcon}<input type="search" id="q" placeholder="Find a creator by name or NIP-05" aria-label="Search creators"></label>
-    </div>
-    <div class="result-count" id="count" aria-live="polite"></div>
-    <div class="cr-grid" id="grid"><div class="skeleton" style="height:260px"></div><div class="skeleton" style="height:260px"></div></div>
+    ${summary([['c-total', 'Creators earning'], ['c-sats', 'Zapped to creators'], ['c-avg', 'Per creator'], ['c-sales', 'Sales']])}
+    <div class="section-head list-head"><h2>Ranking</h2><span class="muted" id="count" aria-live="polite"></span></div>
+    <div class="cr-grid" id="grid"><div class="skeleton" style="height:220px"></div><div class="skeleton" style="height:220px"></div></div>
     <div class="load-more"><button class="btn" id="more" hidden>Show more</button></div>`;
   const $ = (sel) => main.querySelector(sel);
   const grid = $('#grid');
@@ -97,49 +72,33 @@ export async function renderCreators(main, query) {
   let seq = 0;
 
   const paint = () => {
-    const total = ranked.reduce((n, c) => n + c.earnedSats, 0);
-    const list = state.items;
-    const rankOf = new Map(ranked.map((c, i) => [c.pubkey, i + 1]));
-    grid.innerHTML = list.length ? list.slice(0, state.shown).map((c) => creatorCard(c, rankOf.get(c.pubkey) || '', total, state.q)).join('')
-      : `<div class="empty">No creators match “${esc(state.q)}”.</div>`;
-    $('#count').innerHTML = `<b>${num(list.length)}</b> creator${list.length === 1 ? '' : 's'}${state.q ? ` matching “${esc(state.q)}”` : ''}`;
-    more.hidden = state.shown >= list.length;
-  };
-
-  /** The list below the podium: the ranking itself, or the creators matching a search. */
-  const loadList = async () => {
-    const mine = ++seq;
-    grid.classList.add('loading');
-    const items = state.q ? await every('/api/creators', { q: state.q, sort: state.sort, period: state.period }) : ranked;
-    if (mine !== seq) return;
-    grid.classList.remove('loading');
-    state.items = items;
-    state.shown = PAGE;
-    paint();
+    grid.innerHTML = ranked.length ? ranked.slice(0, state.shown).map((c, i) => creatorCard(c, i + 1)).join('')
+      : '<div class="empty">No creators in this period yet.</div>';
+    $('#count').textContent = `${num(ranked.length)} creator${ranked.length === 1 ? '' : 's'}`;
+    more.hidden = state.shown >= ranked.length;
   };
 
   /** Re-ranks for the current sort and period: summary, podium, list. */
   const refresh = async () => {
     const mine = ++seq;
-    $('#podium').classList.add('loading');
+    grid.classList.add('loading');
     const items = await every('/api/creators', { sort: state.sort, period: state.period });
     if (mine !== seq) return;
-    $('#podium').classList.remove('loading');
+    grid.classList.remove('loading');
     ranked = items;
-    const earning = ranked.filter((c) => c.earnedSats > 0).sort((a, b) => b.earnedSats - a.earnedSats);
+    const earning = ranked.filter((c) => c.earnedSats > 0);
     const total = earning.reduce((n, c) => n + c.earnedSats, 0);
-    const top10 = earning.slice(0, 10).reduce((n, c) => n + c.earnedSats, 0);
+    const sales = ranked.reduce((n, c) => n + c.sales, 0);
     tween($('#c-total'), earning.length);
     $('#c-total-hint').textContent = `of ${num(ranked.length)} ${state.period ? 'active in this period' : 'who have published'}`;
     tween($('#c-sats'), total, (v) => satsShort(v));
     $('#c-sats-hint').textContent = 'sats, peer to peer';
     tween($('#c-avg'), earning.length ? total / earning.length : 0, (v) => satsShort(v));
-    $('#c-avg-hint').textContent = 'average sats earned';
-    tween($('#c-top'), total ? (top10 / total) * 100 : 0, (v) => `${Math.round(v)}%`);
-    $('#c-top-hint').textContent = 'of sats went to the top ten';
-    const [figure, line, keep] = PODIUM_BY_SORT[state.sort];
-    $('#podium').innerHTML = podium(ranked.filter(keep), figure, line);
-    await loadList();
+    $('#c-avg-hint').textContent = 'average sats received';
+    tween($('#c-sales'), sales);
+    $('#c-sales-hint').textContent = 'purchases of their work';
+    state.shown = PAGE;
+    paint();
   };
 
   const syncUrl = () => {
@@ -148,11 +107,6 @@ export async function renderCreators(main, query) {
     if (state.period) p.set('period', state.period);
     history.replaceState(null, '', `#/creators${p.size ? `?${p}` : ''}`);
   };
-  let debounce;
-  $('#q').addEventListener('input', (e) => {
-    clearTimeout(debounce);
-    debounce = setTimeout(() => { state.q = e.target.value.trim(); loadList(); }, 200);
-  });
   segmented($('#sort'), CREATOR_SORTS, state.sort, (v) => { state.sort = v; syncUrl(); refresh(); }, 'Rank creators by');
   segmented($('#period'), PERIODS_SHORT, state.period, (v) => { state.period = v; syncUrl(); refresh(); }, 'Period');
   more.addEventListener('click', () => { state.shown += PAGE; paint(); });
@@ -230,8 +184,8 @@ export async function renderSupporters(main, query) {
   let shown = 50;
   let rows = [];
   main.innerHTML = `
-    <div class="page-head"><div class="eyebrow">Supporters</div><h1>The people paying creators directly</h1>
-      <p>No ads and no subscriptions: every sat here bought a piece of work outright, paid straight to the people who made it.</p></div>
+    <div class="page-head"><div class="eyebrow">Supporters</div><h1>Top supporters on Fanfares</h1>
+      <p>The people paying creators directly. Every sat here bought a piece of work outright.</p></div>
     <div class="toolbar end"><div id="period"></div></div>
     ${summary([['s-total', 'Supporters'], ['s-sats', 'Sats spent'], ['s-avg', 'Per supporter'], ['s-repeat', 'Came back'], ['s-wide', 'Backed 2+ creators']])}
     <div id="podium"></div>
@@ -244,7 +198,6 @@ export async function renderSupporters(main, query) {
 
   const paint = () => {
     const total = rows.reduce((n, s) => n + s.spentSats, 0);
-    const top = rows[0]?.spentSats || 1;
     $('#list').innerHTML = rows.length ? `
       <div class="sp-row sp-headrow" aria-hidden="true"><span>#</span><span>Supporter</span><span class="r hide-sm">Purchases</span><span class="r hide-sm">Creators</span><span class="r hide-sm">Avg. ticket</span><span class="r">Spent</span><span class="r hide-sm">Last</span></div>
       ${rows.slice(0, shown).map((s, i) => `<a class="sp-row" href="${personHref(s.pubkey)}">
@@ -253,7 +206,7 @@ export async function renderSupporters(main, query) {
         <span class="r num hide-sm">${num(s.purchases)}</span>
         <span class="r num hide-sm">${num(s.creators)}</span>
         <span class="r hide-sm">${satsShort(s.purchases ? s.spentSats / s.purchases : 0)}</span>
-        <span class="r sp-spent">${satsShort(s.spentSats)}${shareBar(s.spentSats, top)}<small class="show-sm">${plural(s.purchases, 'purchase')} · ${plural(s.creators, 'creator')}</small></span>
+        <span class="r sp-spent">${satsShort(s.spentSats)}<small class="show-sm">${plural(s.purchases, 'purchase')} · ${plural(s.creators, 'creator')}</small></span>
         <span class="r muted hide-sm" title="${s.latest ? new Date(s.latest * 1000).toLocaleString('en-US') : ''}">${agoShort(s.latest)}</span>
       </a>`).join('')}` : '<div class="empty">No purchases in this period yet.</div>';
     $('#count').textContent = total ? `${num(rows.length)} supporters · ${num(total)} sats` : '';
@@ -282,7 +235,7 @@ export async function renderSupporters(main, query) {
     $('#s-repeat-hint').textContent = `${num(repeat)} bought more than once`;
     tween($('#s-wide'), ratio(wide), (v) => `${Math.round(v)}%`);
     $('#s-wide-hint').textContent = `${num(wide)} support several creators`;
-    $('#podium').innerHTML = podium(rows, (s) => `${satsShort(s.spentSats)}<small>sats</small>`,
+    $('#podium').innerHTML = podium(rows, (s) => `<span class="btc-num">${satsShort(s.spentSats)}</span><small>sats</small>`,
       (s) => `${plural(s.purchases, 'purchase')} · ${plural(s.creators, 'creator')}`);
     paint();
   };

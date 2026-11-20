@@ -7,13 +7,13 @@
  * offline visit still opens. Cross-origin requests (cover art, fonts,
  * relays) are left to the browser.
  */
-const CACHE = 'fanfares-index-v2';
+const CACHE = 'fanfares-index-v3';
 const SHELL = [
-  './', 'index.html', 'manifest.webmanifest', 'css/app.css', 'img/logo.png', 'img/icon-192.png',
+  './', 'index.html', 'manifest.webmanifest', 'css/app.css', 'img/logo-mark.png', 'img/icon-192.png',
   'js/app.js', 'js/api.js', 'js/static-api.js', 'js/ui.js', 'js/nostr.js', 'js/player.js', 'js/charts.js',
   'js/insights-ui.js', 'js/sync-status.js', 'js/live-relays.js',
   'js/views/home.js', 'js/views/events.js', 'js/views/people.js', 'js/views/insights.js', 'js/views/live.js',
-  'js/views/feed.js', 'js/views/leaderboards.js', 'js/views/search.js'
+  'js/views/feed.js', 'js/views/search.js'
 ];
 
 self.addEventListener('install', (e) => {

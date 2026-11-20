@@ -43,3 +43,13 @@ export function isStatic() {
   mode ??= probe().then(Boolean);
   return mode;
 }
+
+/** Every row of a paged list endpoint (100 per request; the static API serves one file). */
+export async function every(path, params = {}) {
+  const out = [];
+  for (let offset = 0; ; offset += 100) {
+    const res = await get(path, { ...params, limit: 100, offset });
+    out.push(...res.items);
+    if (!res.items.length || out.length >= res.total) return out;
+  }
+}
