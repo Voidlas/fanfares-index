@@ -51,13 +51,17 @@ function latestCard(e) {
     <span class="latest-go" aria-hidden="true">→</span></a>`;
 }
 
-/** One-line connection status for a feed header. */
-export function liveStatusText() {
+/**
+ * One-line connection status for a feed header.
+ * @param {number} [newestAt] Time of the newest item shown, for the "all quiet" note.
+ */
+export function liveStatusText(newestAt) {
   const s = liveStatus();
   if (!s.since) return 'Connecting to relays…';
   const relays = s.connected ? `${s.connected} of ${s.relays.length} relays connected` : 'Relays unreachable, showing the archive';
-  const fresh = s.live ? `${num(s.live)} new since the snapshot` : 'listening for new activity';
-  return `${relays} · ${fresh}${s.lastLiveAt ? ` · last ${agoShort(s.lastLiveAt)} ago` : ''}`;
+  if (s.live) return `${relays} · ${num(s.live)} new since the snapshot · last ${agoShort(s.lastLiveAt)} ago`;
+  const quiet = newestAt ? `all quiet, no new Fanfares activity since ${new Date(newestAt * 1000).toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' })}` : 'listening for new activity';
+  return `${relays} · ${quiet}`;
 }
 
 /**
@@ -76,6 +80,7 @@ export function liveStatusText() {
 export async function liveFeed(host, { limit = 8, filter = () => true, status, pin = false, onPaint } = {}) {
   const snapshot = await get('/api/activity', { limit: 100 });
   let show = filter;
+  let newestAt = 0;
   const paint = () => {
     if (!host.isConnected) { stop(); return; }
     const all = [...liveItems(), ...snapshot].sort((a, b) => b.at - a.at);
@@ -84,12 +89,13 @@ export async function liveFeed(host, { limit = 8, filter = () => true, status, p
     const before = new Set([...host.querySelectorAll('[data-id]')].map((x) => x.dataset.id));
     host.innerHTML = (latest ? latestCard(latest) : '') + (rows.length ? rows.map(feedItem).join('') : '<div class="empty">Nothing here yet.</div>');
     if (before.size) host.querySelectorAll('.fi.is-live').forEach((x) => { if (!before.has(x.dataset.id)) x.classList.add('enter'); });
-    if (status) status.textContent = liveStatusText();
+    newestAt = all[0]?.at || 0;
+    if (status) status.textContent = liveStatusText(newestAt);
     onPaint?.(all);
   };
   let pending;
   const stop = subscribeLive((m) => {
-    if (m.type === 'status') { if (status && host.isConnected) status.textContent = liveStatusText(); return; }
+    if (m.type === 'status') { if (status && host.isConnected) status.textContent = liveStatusText(newestAt); return; }
     clearTimeout(pending);
     pending = setTimeout(paint, m.type === 'profile' ? 300 : 60);
   });
